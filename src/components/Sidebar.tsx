@@ -10,7 +10,8 @@ import {
   LogOut, 
   ChevronLeft,
   ChevronRight,
-  Home
+  Home,
+  FileSearch
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -31,6 +32,7 @@ export function Sidebar() {
   const navItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Map', href: '/map', icon: MapIcon },
+    { name: 'License Search', href: '/contractors', icon: FileSearch },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
 

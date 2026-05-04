@@ -49,7 +49,7 @@ export default function DashboardPage() {
     <div className="space-y-8 animate-in pb-10">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 mt-2 flex items-center gap-2">
+        <div className="text-slate-500 mt-2 flex items-center gap-2">
           {isLoading ? (
             <span className="h-5 w-48 bg-slate-100 rounded animate-pulse" />
           ) : (
@@ -60,7 +60,7 @@ export default function DashboardPage() {
               </Badge>
             </>
           )}
-        </p>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
