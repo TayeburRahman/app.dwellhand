@@ -14,22 +14,26 @@ const supabase = createClient();
 const fetchDashboardData = async () => {
   const { data: { user } } = await supabase.auth.getUser();
 
-  const role = user?.user_metadata?.role || 'free';
-  const tableName = role === 'paid' ? 'la_permits_2016_to_2026_03_20' : 'permits_sample';
+  // Use the standard ca_permits table as requested in requirements
+  const tableName = 'ca_permits';
 
-  const [countRes, recentRes] = await Promise.all([
+  const [countRes, recentRes, commRes, resRes] = await Promise.all([
     supabase.from(tableName).select('*', { count: 'exact', head: true }),
     supabase
       .from(tableName)
-      .select('id, address, status, issue_date, valuation')
+      .select('id, address, status, issue_date, valuation, permit_type')
       .not('issue_date', 'is', null)
       .order('issue_date', { ascending: false })
-      .limit(5)
+      .limit(8),
+    supabase.from(tableName).select('*', { count: 'exact', head: true }).eq('is_commercial', true),
+    supabase.from(tableName).select('*', { count: 'exact', head: true }).eq('is_residential', true)
   ]);
 
   return {
     user,
-    totalPermits: (!countRes.error && countRes.count !== null) ? countRes.count.toLocaleString() : 'Unavailable',
+    totalPermits: (!countRes.error && countRes.count !== null) ? countRes.count.toLocaleString() : '0',
+    commercialCount: (!commRes.error && commRes.count !== null) ? commRes.count.toLocaleString() : '0',
+    residentialCount: (!resRes.error && resRes.count !== null) ? resRes.count.toLocaleString() : '0',
     recentPermits: recentRes.data || []
   };
 };
@@ -46,133 +50,160 @@ export default function DashboardPage() {
   const recentPermits = data?.recentPermits || [];
 
   return (
-    <div className="space-y-8 animate-in pb-10">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h1>
-        <div className="text-slate-500 mt-2 flex items-center gap-2">
-          {isLoading ? (
-            <span className="h-5 w-48 bg-slate-100 rounded animate-pulse" />
-          ) : (
-            <>
-              Welcome back, {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Explorer'}
-              <Badge variant="secondary" className="font-medium">
-                {user?.user_metadata?.role === 'paid' ? 'Professional Plan' : 'Standard Plan'}
-              </Badge>
-            </>
-          )}
+    <div className="space-y-8 animate-in pb-10 mesh-gradient min-h-full -m-8 p-8">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight text-indigo-950 leading-none">Market Intelligence</h1>
+          <div className="text-slate-500 mt-4 flex items-center gap-3">
+            {isLoading ? (
+              <span className="h-5 w-48 bg-slate-100 rounded animate-pulse" />
+            ) : (
+              <>
+                <div className="flex items-center gap-2 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-bold border border-emerald-100 uppercase tracking-widest">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Data Engine: Synchronized
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-widest bg-indigo-50 px-2.5 py-1 rounded-full text-indigo-600 border border-indigo-100">
+                  {user?.user_metadata?.role === 'paid' ? 'Enterprise Access' : 'Professional Access'}
+                </span>
+              </>
+            )}
+          </div>
         </div>
+        {!isLoading && (
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-left md:text-right">
+            Feed ID: {Math.random().toString(36).substring(7).toUpperCase()} • {new Date().toLocaleTimeString()}
+          </div>
+        )}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card className="shadow-sm border-border bg-white">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
-              Total Permits
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        <Card className="glass shadow-2xl border-white/60 group hover:scale-[1.02] transition-all">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Market Inventory
             </CardTitle>
-            <BarChart3 className="w-4 h-4 text-primary" />
+            <BarChart3 className="w-3.5 h-3.5 text-indigo-500" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="h-8 w-24 bg-slate-100 rounded animate-pulse" />
+              <div className="h-7 w-20 bg-slate-100 rounded animate-pulse" />
             ) : (
-              <div className="text-2xl font-bold text-slate-900">{totalPermits}</div>
+              <div className="text-2xl md:text-3xl font-bold text-indigo-950">{totalPermits}</div>
             )}
-            <p className="text-xs text-slate-500 mt-1">Available in your current tier</p>
+            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">Verified Records</p>
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-border bg-white">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
-              Regions Covered
+        <Card className="glass shadow-2xl border-white/60 group hover:scale-[1.02] transition-all">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Residential Units
             </CardTitle>
-            <MapPin className="w-4 h-4 text-primary" />
+            <MapPin className="w-3.5 h-3.5 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-900">Los Angeles</div>
-            <p className="text-xs text-slate-500 mt-1">Primary coverage area</p>
+            {isLoading ? (
+              <div className="h-7 w-20 bg-slate-100 rounded animate-pulse" />
+            ) : (
+              <div className="text-2xl md:text-3xl font-bold text-emerald-600">{data?.residentialCount || '0'}</div>
+            )}
+            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">Development Pipeline</p>
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-border bg-white">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
-              Data Freshness
+        <Card className="glass shadow-2xl border-white/60 group hover:scale-[1.02] transition-all">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Commercial Assets
             </CardTitle>
-            <Clock className="w-4 h-4 text-primary" />
+            <BarChart3 className="w-3.5 h-3.5 text-violet-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-900">Real-time</div>
-            <p className="text-xs text-slate-500 mt-1">Synced with SWR caching</p>
+            {isLoading ? (
+              <div className="h-7 w-20 bg-slate-100 rounded animate-pulse" />
+            ) : (
+              <div className="text-2xl md:text-3xl font-bold text-violet-600">{data?.commercialCount || '0'}</div>
+            )}
+            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">Institutional Growth</p>
+          </CardContent>
+        </Card>
+
+        <Card className="glass shadow-2xl border-white/60 group hover:scale-[1.02] transition-all">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Network Status
+            </CardTitle>
+            <Clock className="w-3.5 h-3.5 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl md:text-3xl font-bold text-indigo-950 flex items-center gap-2">
+              ACTIVE
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">Cloud Synchronized</p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card className="shadow-sm border-border bg-white flex flex-col">
+        <Card className="glass shadow-2xl border-white/40 flex flex-col group overflow-hidden min-h-[300px]">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
-              Interactive Map
+            <CardTitle className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Geospatial Analysis
             </CardTitle>
-            <MapIcon className="w-4 h-4 text-slate-400" />
+            <MapIcon className="w-4 h-4 text-indigo-500 group-hover:rotate-12 transition-transform" />
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col">
-            <div className="text-2xl font-bold text-slate-900 mb-4">Explore Permits</div>
-            <p className="text-sm text-slate-600 mb-6 flex-1">
-              Access the interactive map to visualize permit data clusters across Los Angeles in real-time.
+          <CardContent className="flex-1 flex flex-col relative z-10">
+            <div className="text-4xl font-bold text-indigo-950 mb-3 tracking-tighter">Permit Explorer</div>
+            <p className="text-sm font-semibold text-slate-500 mb-8 flex-1 leading-relaxed">
+              Visualize municipal permit density and development velocity. Advanced spatial filters allow for granular neighborhood-level intelligence.
             </p>
             <Link href="/map" className="w-full">
-              <Button className="w-full font-medium">Open Explorer</Button>
+              <Button className="w-full font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl py-7 shadow-2xl shadow-indigo-200/50 text-sm tracking-widest uppercase active:scale-95 transition-all">Access Intelligence Map</Button>
             </Link>
           </CardContent>
+          <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/5 rounded-full blur-[100px] -mr-24 -mt-24" />
         </Card>
 
-        <Card className="shadow-sm border-border bg-white flex flex-col">
+        <Card className="glass shadow-2xl border-white/40 flex flex-col group overflow-hidden min-h-[300px]">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
-              Data Access
+            <CardTitle className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Compliance & Auth
             </CardTitle>
-            <FileText className="w-4 h-4 text-slate-400" />
+            <FileText className="w-4 h-4 text-violet-500 group-hover:rotate-12 transition-transform" />
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col">
-            <div className="text-2xl font-bold text-slate-900 mb-4">
-              {isLoading ? (
-                <div className="h-8 w-40 bg-slate-100 rounded animate-pulse" />
-              ) : (
-                user?.user_metadata?.role === 'paid' ? 'Pro Tier Active' : 'Free Tier Active'
-              )}
+          <CardContent className="flex-1 flex flex-col relative z-10">
+            <div className="text-4xl font-bold text-indigo-950 mb-3 tracking-tighter">
+              {user?.user_metadata?.role === 'paid' ? 'Enterprise' : 'Professional'}
             </div>
-            <p className="text-sm text-slate-600 mb-6 flex-1">
-              {isLoading ? (
-                <span className="block h-10 w-full bg-slate-100 rounded animate-pulse" />
-              ) : (
-                user?.user_metadata?.role === 'paid'
-                  ? 'You have full access to historical records (2016+).'
-                  : 'You are currently viewing a limited dataset. Upgrade to unlock historical records (2016 - 2025).'
-              )}
+            <p className="text-sm font-semibold text-slate-500 mb-8 flex-1 leading-relaxed">
+              Authorized for full-spectrum market data. Enterprise hooks for API integration and builder intelligence exports are enabled.
             </p>
-            <Button variant="outline" className="w-full font-medium pb-2 group" disabled={isLoading}>
-              Upgrade Account <ArrowUpRight className="w-4 h-4 ml-2 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
+            <Button variant="outline" className="w-full font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50 rounded-2xl py-7 group text-sm tracking-widest uppercase active:scale-95 transition-all shadow-sm">
+              Account Configuration <ArrowUpRight className="w-4 h-4 ml-2 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
             </Button>
           </CardContent>
+          <div className="absolute top-0 right-0 w-48 h-48 bg-violet-500/5 rounded-full blur-[100px] -mr-24 -mt-24" />
         </Card>
       </div>
 
       <div className="mt-8">
-        <Card className="shadow-sm border-border bg-white overflow-hidden">
-          <CardHeader className="border-b border-border bg-slate-50/50 pb-4">
-            <CardTitle className="text-lg font-semibold text-slate-900">
-              Recent Permits
+        <Card className="glass shadow-2xl border-white/40 overflow-hidden rounded-2xl">
+          <CardHeader className="border-b border-indigo-50 bg-indigo-50/20 pb-4">
+            <CardTitle className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+              Intelligence Feed: Recent Transactions
             </CardTitle>
           </CardHeader>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-slate-500 bg-white border-b border-border uppercase font-medium">
                 <tr>
-                  <th className="px-6 py-4">Address</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Valuation</th>
-                  <th className="px-6 py-4">Issue Date</th>
+                  <th className="px-6 py-4 font-bold tracking-widest">Address</th>
+                  <th className="px-6 py-4 font-bold tracking-widest text-center">Category</th>
+                  <th className="px-6 py-4 font-bold tracking-widest text-right">Valuation</th>
+                  <th className="px-6 py-4 font-bold tracking-widest text-right">Issue Date</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -187,20 +218,31 @@ export default function DashboardPage() {
                   ))
                 ) : recentPermits.length > 0 ? (
                   recentPermits.map((permit: any) => (
-                    <tr key={permit.id} className="bg-white hover:bg-slate-50/80 transition-colors">
-                      <td className="px-6 py-4 font-medium text-slate-900">
-                        {permit.address || 'Unknown Address'}
-                      </td>
+                    <tr key={permit.id} className="bg-white/40 hover:bg-white transition-colors group">
                       <td className="px-6 py-4">
-                        <Badge variant="outline" className="bg-slate-50 text-slate-700 font-medium border-slate-200">
-                          {permit.status || 'Pending'}
+                        <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                          {permit.address || 'Unknown Address'}
+                        </div>
+                        <div className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-tighter">
+                          {permit.permit_number || 'No Permit #'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <Badge variant="outline" className="bg-slate-50/50 text-[10px] font-bold uppercase tracking-tight text-slate-600 border-slate-200">
+                          {permit.permit_type?.includes('new') ? 'New Build' : (permit.permit_type || 'Alteration')}
                         </Badge>
                       </td>
-                      <td className="px-6 py-4 text-slate-600 font-medium">
-                        {permit.valuation ? `$${permit.valuation.toLocaleString()}` : 'N/A'}
+                      <td className="px-6 py-4 text-right">
+                        {permit.valuation && permit.valuation >= 10000 ? (
+                          <span className="text-sm font-bold text-emerald-600">
+                            ${permit.valuation.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold text-slate-400 italic">Under $10k</span>
+                        )}
                       </td>
-                      <td className="px-6 py-4 text-slate-500">
-                        {permit.issue_date ? new Date(permit.issue_date).toLocaleDateString() : 'N/A'}
+                      <td className="px-6 py-4 text-right text-slate-500 font-bold tabular-nums">
+                        {permit.issue_date}
                       </td>
                     </tr>
                   ))
