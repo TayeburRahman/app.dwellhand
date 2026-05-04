@@ -1,37 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DwellHand Permit Intelligence SaaS
 
-## Getting Started
+DwellHand is a premium, enterprise-grade Permit Intelligence platform designed for real estate developers, contractors, and municipal analysts. It provides real-time geospatial visualization and market analytics for municipal permits across California.
 
-First, run the development server:
+![Dashboard Preview](https://github.com/TayeburRahman/app.dwellhand/raw/main/public/preview-dashboard.png)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🚀 Key Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 1. Geospatial Intelligence Map
+*   **Real-time Visualization**: Interactive Mapbox GL JS integration showing permit density.
+*   **Advanced Filtering**: Filter by jurisdiction (LA, Beverly Hills, Malibu, Santa Monica), permit type (Commercial, Residential, Basement, Hillside), and professional modes (Builder, Architect, Engineer, Trade).
+*   **Analytical List View**: Side panel for granular permit exploration with real-time sorting by Asset Value, Market Velocity, and Builder Alpha.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 2. Market Intelligence Dashboard
+*   **Executive Overview**: High-level metrics for Total Market Inventory, Residential Developments, and Commercial Assets.
+*   **Activity Stream**: Live feed of recent municipal permit transactions.
+*   **Tiered Access**: Built-in support for Professional and Enterprise access levels.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Professional Builder Profiles (Phase 3 Ready)
+*   **Builder Alpha**: Proprietary ranking of most active contractors in a specific viewport.
+*   **Intelligence Exports**: Structured data ready for institutional growth analysis.
 
-## Learn More
+## 🎨 Design System
 
-To learn more about Next.js, take a look at the following resources:
+The platform utilizes a custom **Indigo & Emerald** design language:
+*   **Colors**: Primary Indigo (`#4f46e5`), Success Emerald (`#10b981`), and Deep Violet accents.
+*   **Aesthetics**: Glassmorphism, mesh gradients, and high-fidelity typography (Inter).
+*   **Responsive**: Fully optimized for Desktop (50/50 split), Tablet, and Mobile (100% stack).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🛠️ Technology Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+*   **Frontend**: Next.js 14 (App Router), React, Tailwind CSS.
+*   **Database**: Supabase (PostgreSQL) with PostGIS for spatial queries.
+*   **Mapping**: Mapbox GL JS with custom tactical dark/light styles.
+*   **State Management**: React Hooks (useCallback, useMemo) for high-performance map interactions.
 
-## Deploy on Vercel
+## 📦 Installation & Setup
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/TayeburRahman/app.dwellhand.git
+   cd app.dwellhand
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# app.dwellhand
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Environment Variables**:
+   Create a `.env.local` file with the following:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
+   NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token
+   ```
+
+4. **Run the development server**:
+   ```bash
+   npm run dev
+   ```
+
+## 📊 Data Schema: `ca_permits`
+
+The platform integrates directly with the `ca_permits` table:
+*   `valuation`: Monetary value of the project.
+*   `is_commercial` / `is_residential`: Type categorization.
+*   `contractor`: Builder identity for Alpha ranking.
+*   `issue_date`: Velocity and temporal analysis.
+
+## ⚖️ Subscription Tiers
+
+*   **Professional**: Full historical records, advanced filtering, and builder intelligence.
+*   **Enterprise**: API hooks, bulk exports, and full-spectrum market data.
+
+---
+Developed by **DwellHand Engineering**
+
+Dynamic Category Colors:
+🔵 Builder: Blue (#3b82f6)
+🟠 Trade: Amber (#f59e0b)
+🟣 Architect: Purple (#8b5cf6)
