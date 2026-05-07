@@ -150,7 +150,7 @@ export default function MapComponent() {
     let query = supabase
       .from('ca_permits')
       .select(`
-        id, latitude, longitude, address, city, state, zip_code, 
+        latitude, longitude, address, city, state, zip_code, 
         permit_number, issue_date, contractor, contractor_license, 
         square_feet, work_description, permit_type, valuation,
         project_type, architect, architect_license, permit_expediter,
@@ -260,7 +260,7 @@ export default function MapComponent() {
         return {
           type: 'Feature',
           properties: {
-            id: d.id,
+            id: d.permit_number,
             address: d.address || 'Unknown Address',
             city: d.city || 'Unknown',
             state: d.state || 'CA',

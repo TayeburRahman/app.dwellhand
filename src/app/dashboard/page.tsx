@@ -18,15 +18,15 @@ const fetchDashboardData = async () => {
   const tableName = 'ca_permits';
 
   const [countRes, recentRes, commRes, resRes] = await Promise.all([
-    supabase.from(tableName).select('*', { count: 'exact', head: true }),
+    supabase.from(tableName).select('*', { count: 'estimated', head: true }),
     supabase
       .from(tableName)
-      .select('id, address, status, issue_date, valuation, permit_type')
+      .select('address, permit_number, issue_date, valuation, permit_type')
       .not('issue_date', 'is', null)
       .order('issue_date', { ascending: false })
       .limit(8),
-    supabase.from(tableName).select('*', { count: 'exact', head: true }).eq('is_commercial', true),
-    supabase.from(tableName).select('*', { count: 'exact', head: true }).eq('is_residential', true)
+    supabase.from(tableName).select('*', { count: 'estimated', head: true }).eq('is_commercial', true),
+    supabase.from(tableName).select('*', { count: 'estimated', head: true }).eq('is_residential', true)
   ]);
 
   return {
@@ -218,7 +218,7 @@ export default function DashboardPage() {
                   ))
                 ) : recentPermits.length > 0 ? (
                   recentPermits.map((permit: any) => (
-                    <tr key={permit.id} className="bg-white/40 hover:bg-white transition-colors group">
+                    <tr key={permit.permit_number} className="bg-white/40 hover:bg-white transition-colors group">
                       <td className="px-6 py-4">
                         <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
                           {permit.address || 'Unknown Address'}

@@ -4,7 +4,6 @@ import { useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 interface PermitResult {
-  id: string;
   address: string;
   permit_type: string;
   issue_date: string;
@@ -35,7 +34,7 @@ export default function ContractorSearchClient() {
     // Query against contractor_license index — Supabase query level only
     const { data, error: dbError } = await supabase
       .from('ca_permits')
-      .select('id, address, permit_type, issue_date, permit_number, city, valuation')
+      .select('address, permit_type, issue_date, permit_number, city, valuation')
       .ilike('contractor_license', `%${license}%`)
       .order('issue_date', { ascending: false })
       .limit(200);
@@ -139,7 +138,7 @@ export default function ContractorSearchClient() {
               <div className="space-y-3">
                 {results.map((permit) => (
                   <div
-                    key={permit.id}
+                    key={permit.permit_number}
                     className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-slate-300 hover:shadow-md transition-all group"
                   >
                     <div className="flex items-start justify-between gap-4">
