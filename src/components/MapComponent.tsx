@@ -119,12 +119,42 @@ export default function MapComponent() {
   }, [selectedPermit]);
 
   const sidePanelOpenRef = useRef(false);
+  const sidePanelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     sidePanelOpenRef.current = isSidePanelOpen;
     if (isSidePanelOpen && popupRef.current) {
       popupRef.current.remove();
       popupRef.current = null;
     }
+  }, [isSidePanelOpen]);
+
+  // Handle click outside side panel to close it
+  useEffect(() => {
+    if (!isSidePanelOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sidePanelRef.current && !sidePanelRef.current.contains(event.target as Node)) {
+        // Don't close if we clicked a button (like a map dot trigger or toggle)
+        const isButton = (event.target as HTMLElement).closest('button');
+        const isMapPoint = (event.target as HTMLElement).closest('.mapboxgl-canvas');
+
+        // If it's a map click not on a button, or just general whitespace
+        if (!isButton) {
+          setIsSidePanelOpen(false);
+        }
+      }
+    };
+
+    // Delay listener to avoid immediate trigger upon opening
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [isSidePanelOpen]);
 
   // Viewport tracking for bound-based queries
@@ -174,7 +204,8 @@ export default function MapComponent() {
         square_feet, work_description, permit_type, valuation,
         project_type, architect, architect_license, permit_expediter,
         apn, geologist, geologist_license, project_category,
-        engineer, engineer_license, permit_link
+        engineer, engineer_license, permit_link,
+        is_owner_builder, is_commercial
       `)
       .not('latitude', 'is', null)
       .not('longitude', 'is', null)
@@ -267,10 +298,10 @@ export default function MapComponent() {
     const geojson = {
       type: 'FeatureCollection',
       features: (rawData || []).map((d: any) => {
+        // 1. Professional Category Mapping (for Tags & Filters)
         let category = 'Builder';
         const lowerType = (d.permit_type || '').toLowerCase();
 
-        // High Priority: Match current active mode first
         if (activeMode === 'Architect' && d.architect) {
           category = 'Architect';
         } else if (activeMode === 'Engineer' && (d.engineer || d.geologist)) {
@@ -279,10 +310,7 @@ export default function MapComponent() {
           category = 'Expeditor';
         } else if (activeMode === 'Trade' && lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
           category = 'Trade';
-        } else if (activeMode === 'Builder') {
-          category = 'Builder';
         } else {
-          // Default fallthrough if no specific mode or mode not matching
           if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
             category = 'Trade';
           } else if (d.architect) {
@@ -292,6 +320,14 @@ export default function MapComponent() {
           } else if (d.permit_expediter) {
             category = 'Expeditor';
           }
+        }
+
+        // 2. Map Dot Color Scheme (Requirement 3.3)
+        let colorType = 'Contractor'; // Default Blue
+        if (d.is_owner_builder) {
+          colorType = 'Owner-Builder'; // Yellow
+        } else if (d.is_commercial) {
+          colorType = 'Commercial'; // Green
         }
 
         return {
@@ -305,6 +341,7 @@ export default function MapComponent() {
             permit_number: d.permit_number || '',
             type: d.permit_type || 'Unknown Type',
             category: category,
+            color_type: colorType,
             valuation: (d.valuation && d.valuation >= 10000) ? d.valuation : null,
             issue_date: d.issue_date || 'N/A',
             contractor: d.contractor || 'N/A',
@@ -417,13 +454,11 @@ export default function MapComponent() {
               paint: {
                 'circle-color': [
                   'match',
-                  ['get', 'category'],
-                  'Builder', '#4f46e5',   // Indigo
-                  'Trade', '#fbbf24',     // Amber
-                  'Architect', '#8b5cf6', // Purple
-                  'Engineer', '#f97316',  // Orange
-                  'Expeditor', '#14b8a6', // Teal
-                  /* default */ '#10b981' // Green
+                  ['get', 'color_type'],
+                  'Contractor', '#3b82f6',     // Blue (Blue-500)
+                  'Owner-Builder', '#fac110', // Yellow (Approx Yellow-500)
+                  'Commercial', '#22c55e',    // Green (Green-500)
+                  /* default */ '#3b82f6'
                 ],
                 'circle-radius': [
                   'interpolate', ['linear'], ['zoom'],
@@ -443,13 +478,11 @@ export default function MapComponent() {
               paint: {
                 'circle-color': [
                   'match',
-                  ['get', 'category'],
-                  'Builder', '#4f46e5',   // Indigo
-                  'Trade', '#fbbf24',     // Amber
-                  'Architect', '#8b5cf6', // Purple
-                  'Engineer', '#f97316',  // Orange
-                  'Expeditor', '#14b8a6', // Teal
-                  /* default */ '#10b981'
+                  ['get', 'color_type'],
+                  'Contractor', '#3b82f6',
+                  'Owner-Builder', '#fac110',
+                  'Commercial', '#22c55e',
+                  /* default */ '#3b82f6'
                 ],
                 'circle-radius': [
                   'interpolate', ['linear'], ['zoom'],
@@ -499,6 +532,7 @@ export default function MapComponent() {
     m.on('mouseleave', 'permit-points', () => { m.getCanvas().style.cursor = ''; });
   };
 
+
   const handleSelectPermit = async (permitId: string) => {
     if (!permitId) return;
     setLoading(true);
@@ -511,38 +545,47 @@ export default function MapComponent() {
         square_feet, work_description, permit_type, valuation,
         project_type, architect, architect_license, permit_expediter,
         apn, geologist, geologist_license, project_category,
-        engineer, engineer_license, permit_link
+        engineer, engineer_license, permit_link,
+        is_owner_builder, is_commercial
       `)
       .eq('permit_number', permitId)
       .single();
 
     setLoading(false);
 
-      if (d) {
-        let category = 'Builder';
-        const lowerType = (d.permit_type || '').toLowerCase();
+    if (d) {
+      let category = 'Builder';
+      const lowerType = (d.permit_type || '').toLowerCase();
 
-        // High Priority: Match current active mode first
-        if (activeMode === 'Architect' && d.architect) {
-          category = 'Architect';
-        } else if (activeMode === 'Engineer' && (d.engineer || d.geologist)) {
-          category = 'Engineer';
-        } else if (activeMode === 'Expeditor' && d.permit_expediter) {
-          category = 'Expeditor';
-        } else if (activeMode === 'Trade' && lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+      // High Priority: Match current active mode first
+      if (activeMode === 'Architect' && d.architect) {
+        category = 'Architect';
+      } else if (activeMode === 'Engineer' && (d.engineer || d.geologist)) {
+        category = 'Engineer';
+      } else if (activeMode === 'Expeditor' && d.permit_expediter) {
+        category = 'Expeditor';
+      } else if (activeMode === 'Trade' && lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+        category = 'Trade';
+      } else {
+        // Default fallthrough
+        if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
           category = 'Trade';
-        } else {
-          // Default fallthrough
-          if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
-            category = 'Trade';
-          } else if (d.architect) {
-            category = 'Architect';
-          } else if (d.engineer || d.geologist) {
-            category = 'Engineer';
-          } else if (d.permit_expediter) {
-            category = 'Expeditor';
-          }
+        } else if (d.architect) {
+          category = 'Architect';
+        } else if (d.engineer || d.geologist) {
+          category = 'Engineer';
+        } else if (d.permit_expediter) {
+          category = 'Expeditor';
         }
+      }
+
+      // 2. Map Dot Color Scheme (Requirement 3.3)
+      let colorType = 'Contractor';
+      if (d.is_owner_builder) {
+        colorType = 'Owner-Builder';
+      } else if (d.is_commercial) {
+        colorType = 'Commercial';
+      }
 
       const freshProps = {
         id: d.permit_number,
@@ -553,6 +596,7 @@ export default function MapComponent() {
         permit_number: d.permit_number || '',
         type: d.permit_type || 'Unknown Type',
         category: category,
+        color_type: colorType,
         valuation: (d.valuation && d.valuation >= 10000) ? d.valuation : null,
         issue_date: d.issue_date || 'N/A',
         contractor: d.contractor || 'N/A',
@@ -616,7 +660,8 @@ export default function MapComponent() {
         square_feet, work_description, permit_type, valuation,
         project_type, architect, architect_license, permit_expediter,
         apn, geologist, geologist_license, project_category,
-        engineer, engineer_license, permit_link
+        engineer, engineer_license, permit_link,
+        is_owner_builder, is_commercial
       `)
       .or(`neighborhood.ilike.%${searchQuery}%,address.ilike.%${searchQuery}%`)
       .not('latitude', 'is', null)
@@ -628,7 +673,7 @@ export default function MapComponent() {
 
     if (d && d.longitude && d.latitude) {
       const coords: [number, number] = [parseFloat(d.longitude), parseFloat(d.latitude)];
-      
+
       // 1. Zoom to the dot with high detail
       map.current.flyTo({
         center: coords,
@@ -812,12 +857,13 @@ export default function MapComponent() {
             className="absolute top-1/2 -translate-y-1/2 left-0 z-40 w-8 h-20 bg-white border border-slate-200 border-l-0 rounded-r-2xl shadow-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-all active:scale-95 group animate-in slide-in-from-left duration-500"
             title="Expand Details"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 transition-transform"><path d="m9 18 6-6-6-6"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 transition-transform"><path d="m9 18 6-6-6-6" /></svg>
           </button>
         )}
 
         {/* Side Panel (Details) */}
         <div
+          ref={sidePanelRef}
           className={`absolute top-0 left-0 h-full w-full md:w-[420px] bg-white/95 backdrop-blur-xl shadow-2xl z-40 transform transition-all duration-500 ease-[cubic-bezier(0.16, 1, 0.3, 1)] ${isSidePanelOpen ? 'translate-x-0' : '-translate-x-full opacity-0'}`}
         >
           <div className="h-full flex flex-col relative">
@@ -886,16 +932,16 @@ export default function MapComponent() {
                     </h3>
                     <div className="grid grid-cols-2 gap-y-4 gap-x-2">
                       <LockedField label="Project Category" value={selectedPermit.project_category} requiredTier="COMMERCIAL" currentTier={currentTier} />
-                      <LockedField 
-                        label="Engineer" 
+                      <LockedField
+                        label="Engineer"
                         value={
                           [
                             selectedPermit.engineer ? `${selectedPermit.engineer} (${selectedPermit.engineer_license || 'No License'})` : null,
                             selectedPermit.geologist ? `Geologist: ${selectedPermit.geologist} (${selectedPermit.geologist_license || 'No License'})` : null
                           ].filter(Boolean).join(' | ') || 'No Data'
-                        } 
-                        requiredTier="COMMERCIAL" 
-                        currentTier={currentTier} 
+                        }
+                        requiredTier="COMMERCIAL"
+                        currentTier={currentTier}
                       />
                       <LockedField label="Permit Link" value="🔗 Official Document" requiredTier="COMMERCIAL" currentTier={currentTier} />
                     </div>
