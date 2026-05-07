@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getLADBSLink } from '@/lib/utils';
 
 interface PermitResult {
   address: string;
@@ -10,6 +11,7 @@ interface PermitResult {
   permit_number: string;
   city: string;
   valuation: number | null;
+  permit_link?: string;
 }
 
 const LADBS_BASE = 'https://www.ladbsservices2.lacity.org/OnlineServices/PermitReport/PcisPermitDetail?id1=';
@@ -34,7 +36,7 @@ export default function ContractorSearchClient() {
     // Query against contractor_license index — Supabase query level only
     const { data, error: dbError } = await supabase
       .from('ca_permits')
-      .select('address, permit_type, issue_date, permit_number, city, valuation')
+      .select('address, permit_type, issue_date, permit_number, city, valuation, permit_link')
       .ilike('contractor_license', `%${license}%`)
       .order('issue_date', { ascending: false })
       .limit(200);
@@ -170,7 +172,7 @@ export default function ContractorSearchClient() {
 
                       {permit.permit_number && (
                         <a
-                          href={`${LADBS_BASE}${permit.permit_number}`}
+                          href={getLADBSLink(permit.permit_number, permit.permit_link)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex-shrink-0 flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors"

@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Layers, AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from './ui/switch';
+import { getLADBSLink } from '@/lib/utils';
 
 const LockedField = ({ label, value, requiredTier, currentTier }: any) => {
   const tiers = ['FREE', 'RESIDENTIAL', 'COMMERCIAL', 'ENTERPRISE'];
@@ -108,6 +109,24 @@ export default function MapComponent() {
   const [sortBy, setSortBy] = useState<'most_active' | 'valuation' | 'name_az' | 'years_biz' | null>(null);
   const [selectedCity, setSelectedCity] = useState<CityKey>('all');
 
+  // Update highlight layer when selection changes
+  useEffect(() => {
+    if (!map.current || !map.current.isStyleLoaded()) return;
+    const m = map.current;
+    if (m.getLayer('selected-permit-point')) {
+      m.setFilter('selected-permit-point', ['==', ['get', 'id'], selectedPermit?.permit_number || '']);
+    }
+  }, [selectedPermit]);
+
+  const sidePanelOpenRef = useRef(false);
+  useEffect(() => {
+    sidePanelOpenRef.current = isSidePanelOpen;
+    if (isSidePanelOpen && popupRef.current) {
+      popupRef.current.remove();
+      popupRef.current = null;
+    }
+  }, [isSidePanelOpen]);
+
   // Viewport tracking for bound-based queries
   const [bounds, setBounds] = useState<mapboxgl.LngLatBounds | null>(null);
 
@@ -155,7 +174,7 @@ export default function MapComponent() {
         square_feet, work_description, permit_type, valuation,
         project_type, architect, architect_license, permit_expediter,
         apn, geologist, geologist_license, project_category,
-        engineer, engineer_license
+        engineer, engineer_license, permit_link
       `)
       .not('latitude', 'is', null)
       .not('longitude', 'is', null)
@@ -206,11 +225,11 @@ export default function MapComponent() {
           .not('permit_type', 'ilike', '%mechanical%');
       }
     } else if (activeMode === 'Architect') {
-      query = query.ilike('permit_type', '%architect%');
+      query = query.not('architect', 'is', null);
     } else if (activeMode === 'Engineer') {
-      query = query.ilike('permit_type', '%engineer%');
+      query = query.or('engineer.not.is.null,geologist.not.is.null');
     } else if (activeMode === 'Expeditor') {
-      query = query.ilike('permit_type', '%expedit%');
+      query = query.not('permit_expediter', 'is', null);
     } else if (activeMode === 'Trade') {
       const activeTradeKeys = Object.entries(tradeSubFilters)
         .filter(([, v]) => v)
@@ -251,10 +270,28 @@ export default function MapComponent() {
         let category = 'Builder';
         const lowerType = (d.permit_type || '').toLowerCase();
 
-        if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
-          category = 'Trade';
-        } else if (lowerType.includes('architect') || (d.contractor && d.contractor.toLowerCase().includes('architect'))) {
+        // High Priority: Match current active mode first
+        if (activeMode === 'Architect' && d.architect) {
           category = 'Architect';
+        } else if (activeMode === 'Engineer' && (d.engineer || d.geologist)) {
+          category = 'Engineer';
+        } else if (activeMode === 'Expeditor' && d.permit_expediter) {
+          category = 'Expeditor';
+        } else if (activeMode === 'Trade' && lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+          category = 'Trade';
+        } else if (activeMode === 'Builder') {
+          category = 'Builder';
+        } else {
+          // Default fallthrough if no specific mode or mode not matching
+          if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+            category = 'Trade';
+          } else if (d.architect) {
+            category = 'Architect';
+          } else if (d.engineer || d.geologist) {
+            category = 'Engineer';
+          } else if (d.permit_expediter) {
+            category = 'Expeditor';
+          }
         }
 
         return {
@@ -275,15 +312,16 @@ export default function MapComponent() {
             square_feet: d.square_feet || 0,
             work_description: d.work_description || 'No description provided.',
             project_type: d.project_type,
-            architect_name: d.architect,
+            architect: d.architect,
             architect_license: d.architect_license,
-            permit_expeditor: d.permit_expediter,
+            permit_expediter: d.permit_expediter,
             apn: d.apn,
-            geologist_name: d.geologist,
+            geologist: d.geologist,
             geologist_license: d.geologist_license,
             project_category: d.project_category,
-            engineer_name: d.engineer,
+            engineer: d.engineer,
             engineer_license: d.engineer_license,
+            permit_link: d.permit_link,
             permits_pulled: null, // Placeholder for Phase 3
             addresses_worked_on: null // Placeholder for Phase 3
           },
@@ -383,6 +421,8 @@ export default function MapComponent() {
                   'Builder', '#4f46e5',   // Indigo
                   'Trade', '#fbbf24',     // Amber
                   'Architect', '#8b5cf6', // Purple
+                  'Engineer', '#f97316',  // Orange
+                  'Expeditor', '#14b8a6', // Teal
                   /* default */ '#10b981' // Green
                 ],
                 'circle-radius': [
@@ -393,6 +433,35 @@ export default function MapComponent() {
                 'circle-stroke-width': 1.5,
                 'circle-stroke-color': '#ffffff'
               }
+            });
+
+            // HIGHLIGHT LAYER for selected dot
+            m.addLayer({
+              id: 'selected-permit-point',
+              type: 'circle',
+              source: 'permits',
+              paint: {
+                'circle-color': [
+                  'match',
+                  ['get', 'category'],
+                  'Builder', '#4f46e5',   // Indigo
+                  'Trade', '#fbbf24',     // Amber
+                  'Architect', '#8b5cf6', // Purple
+                  'Engineer', '#f97316',  // Orange
+                  'Expeditor', '#14b8a6', // Teal
+                  /* default */ '#10b981'
+                ],
+                'circle-radius': [
+                  'interpolate', ['linear'], ['zoom'],
+                  10, 8,
+                  15, 14
+                ],
+                'circle-stroke-width': 4,
+                'circle-stroke-color': '#ffffff',
+                'circle-stroke-opacity': 1,
+                'circle-opacity': 1,
+              },
+              filter: ['==', ['get', 'id'], ''] // Initially nothing selected
             });
           } else if (data) {
             // Ensure data is synced if source survived but style reloaded
@@ -430,80 +499,102 @@ export default function MapComponent() {
     m.on('mouseleave', 'permit-points', () => { m.getCanvas().style.cursor = ''; });
   };
 
-  const handlePointClick = (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
+  const handleSelectPermit = async (permitId: string) => {
+    if (!permitId) return;
+    setLoading(true);
+
+    const { data: d, error } = await supabase
+      .from('ca_permits')
+      .select(`
+        latitude, longitude, address, city, state, zip_code, 
+        permit_number, issue_date, contractor, contractor_license, 
+        square_feet, work_description, permit_type, valuation,
+        project_type, architect, architect_license, permit_expediter,
+        apn, geologist, geologist_license, project_category,
+        engineer, engineer_license, permit_link
+      `)
+      .eq('permit_number', permitId)
+      .single();
+
+    setLoading(false);
+
+      if (d) {
+        let category = 'Builder';
+        const lowerType = (d.permit_type || '').toLowerCase();
+
+        // High Priority: Match current active mode first
+        if (activeMode === 'Architect' && d.architect) {
+          category = 'Architect';
+        } else if (activeMode === 'Engineer' && (d.engineer || d.geologist)) {
+          category = 'Engineer';
+        } else if (activeMode === 'Expeditor' && d.permit_expediter) {
+          category = 'Expeditor';
+        } else if (activeMode === 'Trade' && lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+          category = 'Trade';
+        } else {
+          // Default fallthrough
+          if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+            category = 'Trade';
+          } else if (d.architect) {
+            category = 'Architect';
+          } else if (d.engineer || d.geologist) {
+            category = 'Engineer';
+          } else if (d.permit_expediter) {
+            category = 'Expeditor';
+          }
+        }
+
+      const freshProps = {
+        id: d.permit_number,
+        address: d.address || 'Unknown Address',
+        city: d.city || 'Unknown',
+        state: d.state || 'CA',
+        zip_code: d.zip_code || '',
+        permit_number: d.permit_number || '',
+        type: d.permit_type || 'Unknown Type',
+        category: category,
+        valuation: (d.valuation && d.valuation >= 10000) ? d.valuation : null,
+        issue_date: d.issue_date || 'N/A',
+        contractor: d.contractor || 'N/A',
+        license: d.contractor_license || 'N/A',
+        square_feet: d.square_feet || 0,
+        work_description: d.work_description || 'No description provided.',
+        project_type: d.project_type,
+        architect: d.architect,
+        architect_license: d.architect_license,
+        permit_expediter: d.permit_expediter,
+        apn: d.apn,
+        geologist: d.geologist,
+        geologist_license: d.geologist_license,
+        project_category: d.project_category,
+        engineer: d.engineer,
+        engineer_license: d.engineer_license,
+        permit_link: d.permit_link,
+        permits_pulled: null,
+        addresses_worked_on: null
+      };
+
+      setSelectedPermit(freshProps);
+      setIsSidePanelOpen(true);
+      return freshProps;
+    }
+    return null;
+  };
+
+  const handlePointClick = async (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
     e.preventDefault();
     if (!e.features || e.features.length === 0) return;
 
-    const props = e.features[0].properties;
-
-    if (popupRef.current) {
-      popupRef.current.remove();
+    const permitId = e.features[0].properties?.id;
+    if (permitId) {
+      await handleSelectPermit(permitId);
     }
 
-    const popupNode = document.createElement('div');
-    popupNode.className = 'p-4 min-w-[280px] bg-white font-sans';
-    popupNode.style.fontFamily = 'Inter, sans-serif';
-
-    const valDisplay = props?.valuation ? `$${Number(props.valuation).toLocaleString()}` : 'N/A (<$10k or undefined)';
-    const squareFeet = Number(props?.square_feet || 0).toLocaleString();
-
-    const ladbsLink = `https://www.ladbsservices2.lacity.org/OnlineServices/PermitReport/PcisPermitDetail?id1=${props?.permit_number}`;
-
-    popupNode.innerHTML = `
-      <h4 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1.2;">${props?.address}</h4>
-      <span style="display: inline-block; padding: 3px 8px; background: #e2e8f0; border-radius: 4px; font-size: 10px; font-weight: 800; color: #334155; margin-bottom: 12px; text-transform: uppercase;">${props?.city}, ${props?.state} ${props?.zip_code}</span>
-      
-      <div style="font-size: 12px; color: #475569; display: flex; flex-direction: column; gap: 6px;">
-         <div style="display: flex; justify-content: space-between;"><strong>Permit Type:</strong> <span>${props?.type}</span></div>
-         <div style="display: flex; justify-content: space-between; align-items: center;">
-           <strong>Issue Date:</strong> 
-           <span style="background: #10b981; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${props?.issue_date}</span>
-         </div>
-         
-         <div style="margin-top: 4px; padding-top: 8px; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 4px;">
-           <div><strong>Contractor:</strong> <br/><span style="color: #64748b; font-size: 11px;">${props?.contractor}</span></div>
-           <div><strong>License:</strong> <span style="color: #64748b;">${props?.license}</span></div>
-         </div>
-
-         <div style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 8px; border-top: 1px solid #e2e8f0;">
-           <div>
-             <span style="font-size: 10px; text-transform: uppercase; font-weight: 800; color: #94a3b8;">Valuation</span><br/>
-             <span style="font-size: 14px; font-weight: 900; color: #10b981;">${valDisplay}</span>
-           </div>
-           <div style="text-align: right;">
-             <span style="font-size: 10px; text-transform: uppercase; font-weight: 800; color: #94a3b8;">Sq Ft</span><br/>
-             <span style="font-size: 14px; font-weight: 900; color: #3b82f6;">${squareFeet}</span>
-           </div>
-         </div>
-         
-         <div style="margin-top: 4px; padding-top: 8px; border-top: 1px solid #e2e8f0;">
-           <a href="${ladbsLink}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; text-decoration: none; font-weight: 700; display: block; margin-bottom: 8px; font-size: 11px;">🔗 View on LADBS</a>
-           <strong>Work Description:</strong><br/>
-           <div style="color: #64748b; font-size: 11px; margin-top: 2px; line-height: 1.4; max-height: 60px; overflow-y: auto;">
-             ${props?.work_description}
-           </div>
-         </div>
-
-         <button id="view-details-btn" style="margin-top: 8px; width: 100%; padding: 8px; background: #0f172a; color: white; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
-           View More Details
-         </button>
-      </div>
-    `;
-
-    popupRef.current = new mapboxgl.Popup({ closeButton: true, className: 'premium-popup', offset: 15, maxWidth: '340px' })
-      .setLngLat(e.lngLat)
-      .setDOMContent(popupNode)
-      .addTo(map.current!);
-
-    setTimeout(() => {
-      const btn = popupNode.querySelector('#view-details-btn');
-      if (btn) {
-        btn.addEventListener('click', () => {
-          setSelectedPermit(props);
-          setIsSidePanelOpen(true);
-        });
-      }
-    }, 0);
+    // Ensure any open popup is closed (never visible simultaneously)
+    if (popupRef.current) {
+      popupRef.current.remove();
+      popupRef.current = null;
+    }
   };
 
   const toggleFilter = (key: keyof typeof filters) => {
@@ -516,10 +607,17 @@ export default function MapComponent() {
 
     setIsSearching(true);
 
-    // Query Supabase for matching neighborhood or address
-    const { data, error } = await supabase
+    // Query Supabase for matching neighborhood or address - selecting all necessary fields
+    const { data: d, error } = await supabase
       .from('ca_permits')
-      .select('latitude, longitude')
+      .select(`
+        latitude, longitude, address, city, state, zip_code, 
+        permit_number, issue_date, contractor, contractor_license, 
+        square_feet, work_description, permit_type, valuation,
+        project_type, architect, architect_license, permit_expediter,
+        apn, geologist, geologist_license, project_category,
+        engineer, engineer_license, permit_link
+      `)
       .or(`neighborhood.ilike.%${searchQuery}%,address.ilike.%${searchQuery}%`)
       .not('latitude', 'is', null)
       .not('longitude', 'is', null)
@@ -528,14 +626,51 @@ export default function MapComponent() {
 
     setIsSearching(false);
 
-    if (data && data.longitude && data.latitude) {
+    if (d && d.longitude && d.latitude) {
+      const coords: [number, number] = [parseFloat(d.longitude), parseFloat(d.latitude)];
+      
+      // 1. Zoom to the dot with high detail
       map.current.flyTo({
-        center: [parseFloat(data.longitude), parseFloat(data.latitude)],
-        zoom: 14,
-        essential: true
+        center: coords,
+        zoom: 17,
+        essential: true,
+        pitch: 45
       });
+
+      // 2. Transform raw data to our permit property format
+      // Data-driven category mapping (Requirements Refinement)
+      let category = 'Builder';
+      const lowerType = (d.permit_type || '').toLowerCase();
+
+      // High Priority: Match current active mode first
+      if (activeMode === 'Architect' && d.architect) {
+        category = 'Architect';
+      } else if (activeMode === 'Engineer' && (d.engineer || d.geologist)) {
+        category = 'Engineer';
+      } else if (activeMode === 'Expeditor' && d.permit_expediter) {
+        category = 'Expeditor';
+      } else if (activeMode === 'Trade' && lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+        category = 'Trade';
+      } else {
+        // Default fallthrough
+        if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+          category = 'Trade';
+        } else if (d.architect) {
+          category = 'Architect';
+        } else if (d.engineer || d.geologist) {
+          category = 'Engineer';
+        } else if (d.permit_expediter) {
+          category = 'Expeditor';
+        }
+      }
+
+      // 3. Populate side panel and open it using our unified handler
+      handleSelectPermit(d.permit_number);
+
+      // 4. Highlight the dot with a temporary popup (optional/as requested)
+      // Since we want to avoid side panel/popup overlap, we use a simple popup or marker
+      // But the side panel is now open and contains all the info, fulfilling "populate side panel"
     } else {
-      // Show simple alert if no result
       alert('Location not found in permit database.');
     }
   };
@@ -669,6 +804,18 @@ export default function MapComponent() {
 
         </div>
 
+
+        {/* Toggle Button to reopen side panel when collapsed */}
+        {!isSidePanelOpen && (
+          <button
+            onClick={() => setIsSidePanelOpen(true)}
+            className="absolute top-1/2 -translate-y-1/2 left-0 z-40 w-8 h-20 bg-white border border-slate-200 border-l-0 rounded-r-2xl shadow-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-all active:scale-95 group animate-in slide-in-from-left duration-500"
+            title="Expand Details"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 transition-transform"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        )}
+
         {/* Side Panel (Details) */}
         <div
           className={`absolute top-0 left-0 h-full w-full md:w-[420px] bg-white/95 backdrop-blur-xl shadow-2xl z-40 transform transition-all duration-500 ease-[cubic-bezier(0.16, 1, 0.3, 1)] ${isSidePanelOpen ? 'translate-x-0' : '-translate-x-full opacity-0'}`}
@@ -713,7 +860,7 @@ export default function MapComponent() {
                       <div className="col-span-2"><span className="text-[10px] font-bold text-slate-500 block uppercase tracking-wider">Work Description</span><p className="text-sm text-slate-700 mt-1 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">{selectedPermit.work_description}</p></div>
 
                       <div className="col-span-2 mt-2">
-                        <a href={`https://www.ladbsservices2.lacity.org/OnlineServices/PermitReport/PcisPermitDetail?id1=${selectedPermit.permit_number}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-blue-600 text-sm font-bold bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-md transition-colors">
+                        <a href={getLADBSLink(selectedPermit.permit_number, selectedPermit.permit_link)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-blue-600 text-sm font-bold bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-md transition-colors">
                           🔗 View Official LADBS Permit
                         </a>
                       </div>
@@ -727,10 +874,9 @@ export default function MapComponent() {
                     <div className="grid grid-cols-2 gap-y-4 gap-x-2">
                       <LockedField label="Permit Number" value={selectedPermit.permit_number} requiredTier="RESIDENTIAL" currentTier={currentTier} />
                       <LockedField label="Project Type" value={selectedPermit.project_type} requiredTier="RESIDENTIAL" currentTier={currentTier} />
-                      <LockedField label="Architect" value={selectedPermit.architect_name ? `${selectedPermit.architect_name} (${selectedPermit.architect_license})` : null} requiredTier="RESIDENTIAL" currentTier={currentTier} />
-                      <LockedField label="Permit Expeditor" value={selectedPermit.permit_expeditor} requiredTier="RESIDENTIAL" currentTier={currentTier} />
+                      <LockedField label="Architect" value={selectedPermit.architect ? `${selectedPermit.architect} (${selectedPermit.architect_license || 'No License'})` : 'No Data'} requiredTier="RESIDENTIAL" currentTier={currentTier} />
+                      <LockedField label="Expediter" value={selectedPermit.permit_expediter || 'No Data'} requiredTier="RESIDENTIAL" currentTier={currentTier} />
                       <LockedField label="APN" value={selectedPermit.apn} requiredTier="RESIDENTIAL" currentTier={currentTier} />
-                      <LockedField label="Geologist" value={selectedPermit.geologist_name ? `${selectedPermit.geologist_name} (${selectedPermit.geologist_license})` : null} requiredTier="RESIDENTIAL" currentTier={currentTier} />
                     </div>
                   </div>
 
@@ -740,7 +886,17 @@ export default function MapComponent() {
                     </h3>
                     <div className="grid grid-cols-2 gap-y-4 gap-x-2">
                       <LockedField label="Project Category" value={selectedPermit.project_category} requiredTier="COMMERCIAL" currentTier={currentTier} />
-                      <LockedField label="Engineer" value={selectedPermit.engineer_name ? `${selectedPermit.engineer_name} (${selectedPermit.engineer_license})` : null} requiredTier="COMMERCIAL" currentTier={currentTier} />
+                      <LockedField 
+                        label="Engineer" 
+                        value={
+                          [
+                            selectedPermit.engineer ? `${selectedPermit.engineer} (${selectedPermit.engineer_license || 'No License'})` : null,
+                            selectedPermit.geologist ? `Geologist: ${selectedPermit.geologist} (${selectedPermit.geologist_license || 'No License'})` : null
+                          ].filter(Boolean).join(' | ') || 'No Data'
+                        } 
+                        requiredTier="COMMERCIAL" 
+                        currentTier={currentTier} 
+                      />
                       <LockedField label="Permit Link" value="🔗 Official Document" requiredTier="COMMERCIAL" currentTier={currentTier} />
                     </div>
                   </div>
@@ -926,8 +1082,10 @@ export default function MapComponent() {
                       key={p?.id || i}
                       className="px-4 py-3.5 hover:bg-slate-50 cursor-pointer transition-colors group"
                       onClick={() => {
-                        setSelectedPermit(p);
-                        setIsSidePanelOpen(true);
+                        if (p?.id) {
+                          handleSelectPermit(p.id);
+                        }
+                        // Popup will be closed by the useEffect watching isSidePanelOpen
                         if (map.current) {
                           map.current.flyTo({
                             center: feature.geometry.coordinates as [number, number],
