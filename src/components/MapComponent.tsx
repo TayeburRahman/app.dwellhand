@@ -50,8 +50,8 @@ const CITIES = [
     key: 'all',
     label: 'All Cities',
     dbValue: null,
-    center: [-118.2437, 34.0522] as [number, number],
-    zoom: 11,
+    center: [-118.40, 34.04] as [number, number],
+    zoom: 10,
   },
   {
     key: 'los_angeles',
@@ -421,8 +421,8 @@ export default function MapComponent() {
         map.current = new mapboxgl.Map({
           container: mapContainer.current,
           style: mapStyle,
-          center: [-118.2437, 34.0522], // DTLA
-          zoom: 12,
+          center: [-118.40, 34.04], // LA County
+          zoom: 10,
           pitch: 45,
           failIfMajorPerformanceCaveat: false
         });
@@ -464,7 +464,7 @@ export default function MapComponent() {
                 'circle-color': [
                   'match',
                   ['get', 'color_type'],
-                  'Contractor', '#3b82f6',    // Blue
+                  'Contractor', '#3b82f6',     // Blue
                   'Owner-Builder', '#facc15', // Yellow
                   'Commercial', '#22c55e',    // Green
                   /* default */ '#3b82f6'
@@ -650,10 +650,15 @@ export default function MapComponent() {
     popupNode.className = 'p-4 min-w-[280px] bg-white font-sans';
     popupNode.style.fontFamily = 'Inter, sans-serif';
 
-    const valDisplay = props.valuation ? `$${Number(props.valuation).toLocaleString()}` : 'N/A (<$10k or undefined)';
     const squareFeet = Number(props.square_feet || 0).toLocaleString();
-
     const ladbsLink = getLADBSLink(props.permit_number, props.permit_link);
+
+    const valuationHtml = props.valuation 
+      ? `<div>
+           <span style="font-size: 10px; text-transform: uppercase; font-weight: 800; color: #94a3b8;">Valuation</span><br/>
+           <span style="font-size: 14px; font-weight: 900; color: #10b981;">$${Number(props.valuation).toLocaleString()}</span>
+         </div>`
+      : '';
 
     popupNode.innerHTML = `
       <h4 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1.2;">${props.address}</h4>
@@ -671,12 +676,9 @@ export default function MapComponent() {
            <div><strong>License:</strong> <span style="color: #64748b;">${props.license}</span></div>
          </div>
 
-         <div style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 8px; border-top: 1px solid #e2e8f0;">
-           <div>
-             <span style="font-size: 10px; text-transform: uppercase; font-weight: 800; color: #94a3b8;">Valuation</span><br/>
-             <span style="font-size: 14px; font-weight: 900; color: #10b981;">${valDisplay}</span>
-           </div>
-           <div style="text-align: right;">
+         <div style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 8px; border-top: 1px solid #e2e8f0; align-items: flex-end;">
+           ${valuationHtml}
+           <div style="text-align: right; flex-grow: 1;">
              <span style="font-size: 10px; text-transform: uppercase; font-weight: 800; color: #94a3b8;">Sq Ft</span><br/>
              <span style="font-size: 14px; font-weight: 900; color: #3b82f6;">${squareFeet}</span>
            </div>
@@ -857,7 +859,7 @@ export default function MapComponent() {
               { key: 'Builder', label: 'Builder', color: 'bg-blue-500' },
               { key: 'Architect', label: 'Architect', color: 'bg-purple-500' },
               { key: 'Engineer', label: 'Engineer', color: 'bg-orange-500' },
-              { key: 'Trade', label: 'Trade', color: 'bg-amber-500' },
+              { key: 'Trade', label: 'Trade', color: 'bg-indigo-600' },
               { key: 'Expeditor', label: 'Expediter', color: 'bg-teal-500' },
             ] as const).map(({ key, label, color }) => (
               <button
@@ -904,15 +906,15 @@ export default function MapComponent() {
 
           {/* Trade Sub-filters (checkboxes) */}
           {activeMode === 'Trade' && (
-            <div className="flex flex-wrap items-center justify-center gap-1 md:gap-1.5 glass border-amber-200/50 rounded-2xl px-4 py-2.5 shadow-lg max-w-lg animate-in">
-              <span className="text-[9px] md:text-[10px] font-bold text-amber-500 uppercase tracking-widest w-full text-center md:text-left mb-1">Trade Type:</span>
+            <div className="flex flex-wrap items-center justify-center gap-1 md:gap-1.5 glass border-indigo-200/50 rounded-2xl px-4 py-2.5 shadow-lg max-w-lg animate-in">
+              <span className="text-[9px] md:text-[10px] font-bold text-indigo-600 uppercase tracking-widest w-full text-center md:text-left mb-1">Trade Type:</span>
               {Object.keys(tradeSubFilters).map(trade => (
                 <button
                   key={trade}
                   onClick={() => setTradeSubFilters(prev => ({ ...prev, [trade]: !prev[trade] }))}
                   className={`px-2 md:px-2.5 py-0.5 md:py-1 rounded-full text-[10px] font-bold transition-all ${tradeSubFilters[trade]
-                    ? 'bg-amber-500 text-white shadow'
-                    : 'text-slate-500 border border-slate-200/50 hover:border-amber-300 hover:text-amber-700'
+                    ? 'bg-indigo-600 text-white shadow'
+                    : 'text-slate-500 border border-slate-200/50 hover:border-indigo-300 hover:text-indigo-700'
                     }`}
                 >
                   {trade}
@@ -1048,7 +1050,7 @@ export default function MapComponent() {
         <div className={`absolute bottom-6 left-4 z-20 flex flex-col gap-3 pointer-events-auto transition-all duration-500 ${isSidePanelOpen ? 'opacity-0 pointer-events-none translate-x-[-20px]' : 'opacity-100'}`}>
           <div className="glass rounded-2xl p-4 shadow-2xl border-white/40 flex flex-col gap-3 min-w-[210px]">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1 mb-1">Map Filters</h3>
-            
+
             {[
               { key: 'is_owner_builder', label: 'Owner-Builder', icon: <UserCheck className="w-3.5 h-3.5" /> },
               { key: 'commercial', label: 'Commercial', icon: <Building2 className="w-3.5 h-3.5" /> },
@@ -1065,8 +1067,8 @@ export default function MapComponent() {
                     {label}
                   </span>
                 </div>
-                <Switch 
-                  checked={!!filters[key as keyof typeof filters]} 
+                <Switch
+                  checked={!!filters[key as keyof typeof filters]}
                   onCheckedChange={() => toggleFilter(key as keyof typeof filters)}
                 />
               </div>
@@ -1191,7 +1193,7 @@ export default function MapComponent() {
                   const p = feature.properties;
                   const categoryColor: Record<string, string> = {
                     Builder: 'bg-blue-100 text-blue-700',
-                    Trade: 'bg-amber-100 text-amber-700',
+                    Trade: 'bg-indigo-100 text-indigo-700',
                     Architect: 'bg-purple-100 text-purple-700',
                   };
                   const colorClass = categoryColor[p?.category] || 'bg-slate-100 text-slate-600';
