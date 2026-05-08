@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Layers, AlertCircle, Loader2 } from 'lucide-react';
+import { Layers, AlertCircle, Loader2, Home, Building2, Mountain, Spade, UserCheck } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from './ui/switch';
 import { getLADBSLink } from '@/lib/utils';
@@ -205,7 +205,7 @@ export default function MapComponent() {
         project_type, architect, architect_license, permit_expediter,
         apn, geologist, geologist_license, project_category,
         engineer, engineer_license, permit_link,
-        is_owner_builder, is_commercial
+        is_owner_builder, is_commercial, is_residential, is_hillside, is_basement
       `)
       .not('latitude', 'is', null)
       .not('longitude', 'is', null)
@@ -236,8 +236,14 @@ export default function MapComponent() {
     if (cityConfig?.dbValue) {
       query = query.eq('city', cityConfig.dbValue);
     }
-    if (filters.commercial) query = query.eq('is_commercial', true);
-    if (filters.residential) query = query.eq('is_residential', true);
+    // Apply Toggle Filters (Requirement Update: OR for categories, AND for features)
+    const orFilters: string[] = [];
+    if (filters.commercial) orFilters.push('is_commercial.eq.true');
+    if (filters.residential) orFilters.push('is_residential.eq.true');
+    if (orFilters.length > 0) {
+      query = query.or(orFilters.join(','));
+    }
+
     if (filters.basement) query = query.eq('is_basement', true);
     if (filters.hillside) query = query.eq('is_hillside', true);
     if (filters.is_owner_builder) query = query.eq('is_owner_builder', true);
@@ -247,7 +253,7 @@ export default function MapComponent() {
       if (builderSubFilter === 'New Builds') {
         query = query.ilike('permit_type', '%new%');
       } else if (builderSubFilter === 'ADU') {
-        query = query.ilike('permit_type', '%adu%');
+        query = query.eq('project_category', 'Accessory Dwelling Unit');
       } else if (builderSubFilter === 'Remediation') {
         query = query.ilike('permit_type', '%remediat%');
       } else {
@@ -262,19 +268,22 @@ export default function MapComponent() {
     } else if (activeMode === 'Expeditor') {
       query = query.not('permit_expediter', 'is', null);
     } else if (activeMode === 'Trade') {
-      const activeTradeKeys = Object.entries(tradeSubFilters)
+      const activeTradeFilters = Object.entries(tradeSubFilters)
         .filter(([, v]) => v)
-        .map(([k]) => k.toLowerCase());
-      if (activeTradeKeys.length > 0) {
+        .map(([k]) => k);
+
+      if (activeTradeFilters.length > 0) {
         // Build OR filter for selected trade types at Supabase level
-        const orClauses = activeTradeKeys
-          .map(k => `permit_type.ilike.%${k}%`)
-          .join(',');
-        query = query.or(orClauses);
+        const orClauses = activeTradeFilters.map(filter => {
+          if (filter === 'Retaining Walls') return 'project_category.eq.Retaining Wall';
+          if (filter === 'Swimming Pool / Spa') return 'permit_type.ilike.%pool%';
+          return `permit_type.ilike.%${filter.toLowerCase()}%`;
+        });
+        query = query.or(orClauses.join(','));
       } else {
         // Default: all trade types
         query = query.or(
-          'permit_type.ilike.%electrical%,permit_type.ilike.%plumbing%,permit_type.ilike.%mechanical%,permit_type.ilike.%grading%,permit_type.ilike.%demolition%,permit_type.ilike.%roofing%,permit_type.ilike.%septic%,permit_type.ilike.%pool%,permit_type.ilike.%retaining%'
+          'permit_type.ilike.%electrical%,permit_type.ilike.%plumbing%,permit_type.ilike.%mechanical%,permit_type.ilike.%grading%,permit_type.ilike.%demolition%,permit_type.ilike.%roofing%,permit_type.ilike.%septic%,permit_type.ilike.%pool%,project_category.eq.Retaining Wall'
         );
       }
     }
@@ -308,10 +317,10 @@ export default function MapComponent() {
           category = 'Engineer';
         } else if (activeMode === 'Expeditor' && d.permit_expediter) {
           category = 'Expeditor';
-        } else if (activeMode === 'Trade' && lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+        } else if (activeMode === 'Trade' && (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/) || d.project_category === 'Retaining Wall')) {
           category = 'Trade';
         } else {
-          if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+          if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/) || d.project_category === 'Retaining Wall') {
             category = 'Trade';
           } else if (d.architect) {
             category = 'Architect';
@@ -455,9 +464,9 @@ export default function MapComponent() {
                 'circle-color': [
                   'match',
                   ['get', 'color_type'],
-                  'Contractor', '#3b82f6',     // Blue (Blue-500)
-                  'Owner-Builder', '#fac110', // Yellow (Approx Yellow-500)
-                  'Commercial', '#22c55e',    // Green (Green-500)
+                  'Contractor', '#3b82f6',    // Blue
+                  'Owner-Builder', '#facc15', // Yellow
+                  'Commercial', '#22c55e',    // Green
                   /* default */ '#3b82f6'
                 ],
                 'circle-radius': [
@@ -480,7 +489,7 @@ export default function MapComponent() {
                   'match',
                   ['get', 'color_type'],
                   'Contractor', '#3b82f6',
-                  'Owner-Builder', '#fac110',
+                  'Owner-Builder', '#facc15',
                   'Commercial', '#22c55e',
                   /* default */ '#3b82f6'
                 ],
@@ -546,7 +555,7 @@ export default function MapComponent() {
         project_type, architect, architect_license, permit_expediter,
         apn, geologist, geologist_license, project_category,
         engineer, engineer_license, permit_link,
-        is_owner_builder, is_commercial
+        is_owner_builder, is_commercial, is_residential, is_hillside, is_basement
       `)
       .eq('permit_number', permitId)
       .single();
@@ -564,11 +573,11 @@ export default function MapComponent() {
         category = 'Engineer';
       } else if (activeMode === 'Expeditor' && d.permit_expediter) {
         category = 'Expeditor';
-      } else if (activeMode === 'Trade' && lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+      } else if (activeMode === 'Trade' && (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/) || d.project_category === 'Retaining Wall')) {
         category = 'Trade';
       } else {
         // Default fallthrough
-        if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/)) {
+        if (lowerType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/) || d.project_category === 'Retaining Wall') {
           category = 'Trade';
         } else if (d.architect) {
           category = 'Architect';
@@ -727,7 +736,7 @@ export default function MapComponent() {
         project_type, architect, architect_license, permit_expediter,
         apn, geologist, geologist_license, project_category,
         engineer, engineer_license, permit_link,
-        is_owner_builder, is_commercial
+        is_owner_builder, is_commercial, is_residential, is_hillside, is_basement
       `)
       .or(`neighborhood.ilike.%${searchQuery}%,address.ilike.%${searchQuery}%`)
       .not('latitude', 'is', null)
@@ -1037,36 +1046,34 @@ export default function MapComponent() {
 
         {/* On-Map Toggle Pills (bottom-left) */}
         <div className={`absolute bottom-6 left-4 z-20 flex flex-col gap-3 pointer-events-auto transition-all duration-500 ${isSidePanelOpen ? 'opacity-0 pointer-events-none translate-x-[-20px]' : 'opacity-100'}`}>
-          <div className="flex flex-wrap gap-2 max-w-[calc(100vw-80px)] md:max-w-md">
-            {([
-              { key: 'commercial', label: 'Commercial' },
-              { key: 'residential', label: 'Residential' },
-              { key: 'basement', label: 'Basement' },
-              { key: 'hillside', label: 'Hillside' },
-              { key: 'is_owner_builder', label: 'Owner Builder' },
-            ] as const).map(({ key, label }) => (
-              <button
-                key={key}
-                id={`toggle-${key}`}
-                onClick={() => toggleFilter(key)}
-                className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-[10px] md:text-xs font-bold shadow-xl glass transition-all duration-300 active:scale-90 ${filters[key]
-                  ? 'bg-indigo-600 text-white border-indigo-400 scale-105 shadow-indigo-200/50'
-                  : 'text-slate-600 border-slate-200/50 hover:border-indigo-300 hover:text-indigo-700'
-                  }`}
-              >
-                <div className={`w-2 h-2 rounded-full shadow-inner ${filters[key] ? 'bg-white animate-pulse' : 'bg-slate-300'}`} />
-                {label}
-              </button>
+          <div className="glass rounded-2xl p-4 shadow-2xl border-white/40 flex flex-col gap-3 min-w-[210px]">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1 mb-1">Map Filters</h3>
+            
+            {[
+              { key: 'is_owner_builder', label: 'Owner-Builder', icon: <UserCheck className="w-3.5 h-3.5" /> },
+              { key: 'commercial', label: 'Commercial', icon: <Building2 className="w-3.5 h-3.5" /> },
+              { key: 'residential', label: 'Residential', icon: <Home className="w-3.5 h-3.5" /> },
+              { key: 'basement', label: 'Basement', icon: <Spade className="w-3.5 h-3.5" /> },
+              { key: 'hillside', label: 'Hillside', icon: <Mountain className="w-3.5 h-3.5" /> },
+            ].map(({ key, label, icon }) => (
+              <div key={key} className="flex items-center justify-between gap-4 px-1 group">
+                <div className="flex items-center gap-3">
+                  <div className={`p-1.5 rounded-lg transition-colors ${filters[key as keyof typeof filters] ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'}`}>
+                    {icon}
+                  </div>
+                  <span className={`text-[11px] font-bold transition-colors ${filters[key as keyof typeof filters] ? 'text-indigo-950' : 'text-slate-500'}`}>
+                    {label}
+                  </span>
+                </div>
+                <Switch 
+                  checked={!!filters[key as keyof typeof filters]} 
+                  onCheckedChange={() => toggleFilter(key as keyof typeof filters)}
+                />
+              </div>
             ))}
+
+
           </div>
-          {Object.values(filters).some(Boolean) && (
-            <button
-              onClick={() => setFilters({ commercial: false, residential: false, basement: false, hillside: false, is_owner_builder: false })}
-              className="self-start px-4 py-1.5 rounded-full text-[10px] font-bold text-red-500 glass border-red-200/50 hover:bg-red-50/50 transition-all active:scale-95 shadow-lg"
-            >
-              Clear All Filters
-            </button>
-          )}
         </div>
 
         {/* Map Theme Selector (bottom-right) */}
