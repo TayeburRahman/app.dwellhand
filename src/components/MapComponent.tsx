@@ -625,20 +625,86 @@ export default function MapComponent() {
     return null;
   };
 
-  const handlePointClick = async (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
+  const handlePointClick = (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
     e.preventDefault();
     if (!e.features || e.features.length === 0) return;
 
-    const permitId = e.features[0].properties?.id;
-    if (permitId) {
-      await handleSelectPermit(permitId);
-    }
+    const props = e.features[0].properties;
+    if (!props) return;
 
-    // Ensure any open popup is closed (never visible simultaneously)
+    // Ensure any open popup is closed 
     if (popupRef.current) {
       popupRef.current.remove();
-      popupRef.current = null;
     }
+
+    const popupNode = document.createElement('div');
+    popupNode.className = 'p-4 min-w-[280px] bg-white font-sans';
+    popupNode.style.fontFamily = 'Inter, sans-serif';
+
+    const valDisplay = props.valuation ? `$${Number(props.valuation).toLocaleString()}` : 'N/A (<$10k or undefined)';
+    const squareFeet = Number(props.square_feet || 0).toLocaleString();
+
+    const ladbsLink = getLADBSLink(props.permit_number, props.permit_link);
+
+    popupNode.innerHTML = `
+      <h4 style="margin: 0 0 4px 0; font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1.2;">${props.address}</h4>
+      <span style="display: inline-block; padding: 3px 8px; background: #e2e8f0; border-radius: 4px; font-size: 10px; font-weight: 800; color: #334155; margin-bottom: 12px; text-transform: uppercase;">${props.city}, ${props.state} ${props.zip_code}</span>
+      
+      <div style="font-size: 12px; color: #475569; display: flex; flex-direction: column; gap: 6px;">
+         <div style="display: flex; justify-content: space-between;"><strong>Permit Type:</strong> <span>${props.type}</span></div>
+         <div style="display: flex; justify-content: space-between; align-items: center;">
+           <strong>Issue Date:</strong> 
+           <span style="background: #10b981; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${props.issue_date}</span>
+         </div>
+         
+         <div style="margin-top: 4px; padding-top: 8px; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 4px;">
+           <div><strong>Contractor:</strong> <br/><span style="color: #64748b; font-size: 11px;">${props.contractor}</span></div>
+           <div><strong>License:</strong> <span style="color: #64748b;">${props.license}</span></div>
+         </div>
+
+         <div style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 8px; border-top: 1px solid #e2e8f0;">
+           <div>
+             <span style="font-size: 10px; text-transform: uppercase; font-weight: 800; color: #94a3b8;">Valuation</span><br/>
+             <span style="font-size: 14px; font-weight: 900; color: #10b981;">${valDisplay}</span>
+           </div>
+           <div style="text-align: right;">
+             <span style="font-size: 10px; text-transform: uppercase; font-weight: 800; color: #94a3b8;">Sq Ft</span><br/>
+             <span style="font-size: 14px; font-weight: 900; color: #3b82f6;">${squareFeet}</span>
+           </div>
+         </div>
+         
+         <div style="margin-top: 4px; padding-top: 8px; border-top: 1px solid #e2e8f0;">
+           <a href="${ladbsLink}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; text-decoration: none; font-weight: 700; display: block; margin-bottom: 8px; font-size: 11px;">🔗 View on LADBS</a>
+           <strong>Work Description:</strong><br/>
+           <div style="color: #64748b; font-size: 11px; margin-top: 2px; line-height: 1.4; max-height: 60px; overflow-y: auto;">
+             ${props.work_description}
+           </div>
+         </div>
+
+         <button id="view-details-btn" style="margin-top: 8px; width: 100%; padding: 8px; background: #0f172a; color: white; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
+           View More Details
+         </button>
+      </div>
+    `;
+
+    popupRef.current = new mapboxgl.Popup({ closeButton: true, className: 'premium-popup', offset: 15, maxWidth: '340px' })
+      .setLngLat(e.lngLat)
+      .setDOMContent(popupNode)
+      .addTo(map.current!);
+
+    // Handle button click in popup
+    setTimeout(() => {
+      const btn = popupNode.querySelector('#view-details-btn');
+      if (btn) {
+        btn.addEventListener('click', () => {
+          handleSelectPermit(props.id); // This will fetch full data and open side panel
+          if (popupRef.current) {
+            popupRef.current.remove();
+            popupRef.current = null;
+          }
+        });
+      }
+    }, 0);
   };
 
   const toggleFilter = (key: keyof typeof filters) => {
