@@ -103,6 +103,8 @@ export default function MapComponent() {
   const [isListViewOpen, setIsListViewOpen] = useState(true);
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [selectedPermit, setSelectedPermit] = useState<any>(null);
+  const [addressPermits, setAddressPermits] = useState<any[]>([]);
+  const sidePanelContentRef = useRef<HTMLDivElement>(null);
   const [currentTier, setCurrentTier] = useState('FREE'); // Set tier for testing
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -128,6 +130,34 @@ export default function MapComponent() {
       popupRef.current = null;
     }
   }, [isSidePanelOpen]);
+
+  // Handle map resize when side panels toggle to prevent layout issues
+  useEffect(() => {
+    if (!map.current) return;
+
+    const resizeMap = () => {
+      map.current?.resize();
+    };
+
+    // Immediate resize
+    resizeMap();
+    // Multiple resizes during transition to ensure smoothness
+    const timers = [
+      setTimeout(resizeMap, 100),
+      setTimeout(resizeMap, 300),
+      setTimeout(resizeMap, 500),
+      setTimeout(resizeMap, 800),
+    ];
+
+    return () => timers.forEach(clearTimeout);
+  }, [isListViewOpen]);
+
+  // Scroll side panel to top on change
+  useEffect(() => {
+    if (sidePanelContentRef.current) {
+      sidePanelContentRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [selectedPermit?.id]);
 
   // Handle click outside side panel to close it
   useEffect(() => {
@@ -213,7 +243,7 @@ export default function MapComponent() {
       .lte('latitude', maxLat)
       .gte('longitude', minLng)
       .lte('longitude', maxLng)
-      .limit(500); // Max 500 records per fetch
+      .limit(500);
 
     // Apply Supabase-level sorting (PROMPT 11 & Requirements Sync)
     if (sortBy === 'valuation') {
@@ -236,17 +266,25 @@ export default function MapComponent() {
     if (cityConfig?.dbValue) {
       query = query.eq('city', cityConfig.dbValue);
     }
-    // Apply Toggle Filters (Requirement Update: OR for categories, AND for features)
-    const orFilters: string[] = [];
-    if (filters.commercial) orFilters.push('is_commercial.eq.true');
-    if (filters.residential) orFilters.push('is_residential.eq.true');
-    if (orFilters.length > 0) {
-      query = query.or(orFilters.join(','));
+    // Apply Toggle Filters (Exclusive-when-Active Logic)
+    const categoryFilters: string[] = [];
+    if (filters.commercial) categoryFilters.push('is_commercial.eq.true');
+    if (filters.residential) categoryFilters.push('is_residential.eq.true');
+    if (filters.is_owner_builder) categoryFilters.push('is_owner_builder.eq.true');
+
+    if (categoryFilters.length > 0) {
+      query = query.or(categoryFilters.join(','));
     }
 
     if (filters.basement) query = query.eq('is_basement', true);
     if (filters.hillside) query = query.eq('is_hillside', true);
-    if (filters.is_owner_builder) query = query.eq('is_owner_builder', true);
+
+    // THE FIX: If any filter is active (Categories or Features) 
+    // AND Owner-Builder is NOT explicitly requested, strictly exclude them.
+    const isAnyFilterActive = filters.commercial || filters.residential || filters.is_owner_builder || filters.basement || filters.hillside;
+    if (isAnyFilterActive && !filters.is_owner_builder) {
+      query = query.neq('is_owner_builder', true);
+    }
 
     // Apply Mode filters at Supabase query level (PROMPT 9)
     if (activeMode === 'Builder') {
@@ -542,10 +580,16 @@ export default function MapComponent() {
   };
 
 
-  const handleSelectPermit = async (permitId: string) => {
+  const handleSelectPermit = async (permitId: string, initialData?: any) => {
     if (!permitId) return;
-    setLoading(true);
 
+    // If we have initial data (from map click or list), show it immediately for instant feedback
+    if (initialData) {
+      setSelectedPermit(initialData);
+      setIsSidePanelOpen(true);
+    }
+
+    setLoading(true);
     const { data: d, error } = await supabase
       .from('ca_permits')
       .select(`
@@ -561,8 +605,24 @@ export default function MapComponent() {
       .single();
 
     setLoading(false);
-
     if (d) {
+      // 1. Fetch all other permits for this same address/APN (Property History)
+      const { data: allForAddress } = await supabase
+        .from('ca_permits')
+        .select(`
+          latitude, longitude, address, city, state, zip_code, 
+          permit_number, issue_date, contractor, contractor_license, 
+          square_feet, work_description, permit_type, valuation,
+          project_type, architect, architect_license, permit_expediter,
+          apn, geologist, geologist_license, project_category,
+          engineer, engineer_license, permit_link,
+          is_owner_builder, is_commercial, is_residential, is_hillside, is_basement
+        `)
+        .eq(d.apn ? 'apn' : 'address', d.apn || d.address)
+        .order('issue_date', { ascending: false });
+
+      setAddressPermits(allForAddress || [d]);
+
       let category = 'Builder';
       const lowerType = (d.permit_type || '').toLowerCase();
 
@@ -641,6 +701,19 @@ export default function MapComponent() {
     const props = e.features[0].properties;
     if (!props) return;
 
+    // Center map on the clicked point
+    const coordinates = (e.features[0].geometry as any).coordinates.slice();
+    if (map.current) {
+      map.current.flyTo({
+        center: coordinates,
+        zoom: Math.max(map.current.getZoom(), 15.5),
+        essential: true,
+        duration: 1500
+      });
+    }
+
+    handleSelectPermit(props.id || props.permit_number, props);
+
     // Ensure any open popup is closed 
     if (popupRef.current) {
       popupRef.current.remove();
@@ -653,7 +726,7 @@ export default function MapComponent() {
     const squareFeet = Number(props.square_feet || 0).toLocaleString();
     const ladbsLink = getLADBSLink(props.permit_number, props.permit_link);
 
-    const valuationHtml = props.valuation 
+    const valuationHtml = props.valuation
       ? `<div>
            <span style="font-size: 10px; text-transform: uppercase; font-weight: 800; color: #94a3b8;">Valuation</span><br/>
            <span style="font-size: 14px; font-weight: 900; color: #10b981;">$${Number(props.valuation).toLocaleString()}</span>
@@ -708,7 +781,7 @@ export default function MapComponent() {
       const btn = popupNode.querySelector('#view-details-btn');
       if (btn) {
         btn.addEventListener('click', () => {
-          handleSelectPermit(props.id); // This will fetch full data and open side panel
+          handleSelectPermit(props.id || props.permit_number); // This will fetch full data and open side panel
           if (popupRef.current) {
             popupRef.current.remove();
             popupRef.current = null;
@@ -728,8 +801,8 @@ export default function MapComponent() {
 
     setIsSearching(true);
 
-    // Query Supabase for matching neighborhood or address - selecting all necessary fields
-    const { data: d, error } = await supabase
+    // Query Supabase for matching neighborhood or address
+    let query = supabase
       .from('ca_permits')
       .select(`
         latitude, longitude, address, city, state, zip_code, 
@@ -740,11 +813,31 @@ export default function MapComponent() {
         engineer, engineer_license, permit_link,
         is_owner_builder, is_commercial, is_residential, is_hillside, is_basement
       `)
-      .or(`neighborhood.ilike.%${searchQuery}%,address.ilike.%${searchQuery}%`)
+      .or(`neighborhood.ilike.%${searchQuery}%,address.ilike.%${searchQuery}%`);
+
+    // Apply active toggles to search results for consistency
+    const catF: string[] = [];
+    if (filters.commercial) catF.push('is_commercial.eq.true');
+    if (filters.residential) catF.push('is_residential.eq.true');
+    if (filters.is_owner_builder) catF.push('is_owner_builder.eq.true');
+
+    if (catF.length > 0) {
+      query = query.or(catF.join(','));
+    }
+
+    if (filters.basement) query = query.eq('is_basement', true);
+    if (filters.hillside) query = query.eq('is_hillside', true);
+
+    const isAnyFActive = filters.commercial || filters.residential || filters.is_owner_builder || filters.basement || filters.hillside;
+    if (isAnyFActive && !filters.is_owner_builder) {
+      query = query.neq('is_owner_builder', true);
+    }
+
+    const { data: d, error } = await query
       .not('latitude', 'is', null)
       .not('longitude', 'is', null)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     setIsSearching(false);
 
@@ -828,7 +921,7 @@ export default function MapComponent() {
 
 
           {/* City Switcher */}
-          <div className="flex items-center gap-1 glass rounded-full px-2 py-1 shadow-2xl border-white/60">
+          <div className="flex items-center gap-1 glass rounded-full px-2 py-1 shadow-2xl border-white/60 max-w-full overflow-x-auto no-scrollbar">
             <span className="hidden md:inline text-[9px] font-bold text-slate-400 uppercase tracking-widest px-2">Jurisdiction:</span>
             {CITIES.map(city => (
               <button
@@ -922,8 +1015,6 @@ export default function MapComponent() {
               ))}
             </div>
           )}
-
-
         </div>
 
 
@@ -962,7 +1053,29 @@ export default function MapComponent() {
                 <>
                   <div className="space-y-4">
                     <h3 className="font-bold text-sm text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-2 text-emerald-600 flex items-center justify-between">
-                      Free Tier Data
+                      Property History ({addressPermits.length})
+                    </h3>
+                    <div className="space-y-3">
+                      {addressPermits.map((p) => (
+                        <div
+                          key={p.permit_number}
+                          onClick={() => handleSelectPermit(p.permit_number, p)}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer ${selectedPermit?.permit_number === p.permit_number ? 'bg-indigo-50 border-indigo-200 shadow-sm' : 'bg-white border-slate-100 hover:border-indigo-100'}`}
+                        >
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-tight">{p.permit_type}</span>
+                            <span className="text-[10px] font-bold text-slate-400">{p.issue_date}</span>
+                          </div>
+                          <p className="text-xs font-semibold text-slate-800 mt-1 truncate">{p.contractor || 'Owner-Builder'}</p>
+                          {p.valuation && <p className="text-[10px] font-bold text-emerald-600 mt-1">${Number(p.valuation).toLocaleString()}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-sm text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-2 text-emerald-600 flex items-center justify-between">
+                      Detailed Permit Info
                     </h3>
                     <div className="grid grid-cols-2 gap-y-4 gap-x-2">
                       <div className="col-span-2 sm:col-span-1"><span className="text-[10px] font-bold text-slate-500 block uppercase tracking-wider">Address</span><span className="text-sm font-semibold">{selectedPermit.address}</span></div>
@@ -1101,6 +1214,17 @@ export default function MapComponent() {
           )}
           {/* ... error alert remains ... */}
         </div>
+
+        {/* Analyze List Button (Top-Right Positioning) */}
+        {!isListViewOpen && (
+          <button
+            onClick={() => setIsListViewOpen(true)}
+            className="absolute top-48 right-4 md:top-4 md:right-16 z-30 bg-indigo-600 text-white shadow-[0_20px_40px_rgba(79,70,229,0.3)] px-5 md:px-8 py-2.5 md:py-3 rounded-2xl text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-indigo-700 hover:scale-105 transition-all active:scale-95 flex items-center gap-2 md:gap-3 border border-indigo-400/30 animate-in fade-in slide-in-from-right-4 duration-500"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="md:w-[16px] md:h-[16px]"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
+            Analyze List
+          </button>
+        )}
       </div>
 
       {/* List View Panel (Right side) */}
@@ -1249,16 +1373,6 @@ export default function MapComponent() {
         </div>
       )}
 
-      {/* Show List View Button (if closed) */}
-      {!isListViewOpen && (
-        <button
-          onClick={() => setIsListViewOpen(true)}
-          className="absolute bottom-24 right-4 md:top-4 md:bottom-auto z-30 bg-indigo-600 text-white shadow-2xl px-8 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-3 border border-indigo-500/50"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
-          Analyze List
-        </button>
-      )}
 
       <style dangerouslySetInnerHTML={{
         __html: `
