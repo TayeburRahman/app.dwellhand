@@ -1,3 +1,45 @@
+
+
+<!-- =========================== -->
+
+Hi [Client Name],imit: Enforced in 
+
+src/components/MapComponent.tsx
+ within the fetchPermitData function (Line 246: .limit(500)).
+Data Source: Directly querying the ca_permits table via Supabase client.
+Rendering: Initialized as a geojson source in Mapbox (Line 453) with cluster: false.
+Missing Infrastructure: Although there is a folder structure for src/app/api/tiles/[z]/[x]/[y], it is currently empty and not serving tiles. The map is still relying on the direct 500-limit query.
+Recommendation: To fix the client's concern, we need to implement the SQL logic for ST_AsMVT in Supabase and hook up the /api/tiles route to serve these tiles to the map.
+Would you like me to go ahead and implement the Vector Tiles (MVT) route now to remove this limit?
+
+I understand your concern regarding the 500-record limit. Here is a clarification on why it is there and how we can upgrade the system to ensure 100% data reliability:
+
+How the 500-Limit Works Currently:
+
+The map uses viewport-based fetching. Every time you pan or zoom, the system asks the database for permits visible only in that specific window.
+To keep the map fast and prevent browser crashes (since we are rendering raw data points), we currently limit each request to the 500 most relevant records (sorted by newest date or highest valuation).
+The Problem: You are correct—in dense areas with 1,000+ permits, you are only seeing a 'representative sample.' This can make the map feel incomplete.
+The "Property Permits" Success:
+
+As you noted, we successfully implemented a cleaner 'deep-dive' system. When a specific property is selected, the system now prioritizes its full history and details in the side panel, which is much more reliable than trying to click through overlapping dots.
+The Solution: Transitioning to Vector Tiles (Zillow Style):
+
+To remove the 500-limit entirely, we should move to Dynamic Vector Tiles (MVT).
+How it works: Instead of sending raw rows of data, the server generates 'data-tiles' that can handle hundreds of thousands of permits simultaneously.
+Clustering: This would allow us to represent the 'Full Market Inventory' using clusters (e.g., a circle saying '50 permits' that breaks into individual dots as you zoom in), exactly as Zillow does.
+I can begin transitioning the architecture to Vector Tiles to ensure every single permit in the database is represented on the map without performance loss or limits
+
+
+Technical Summary of your System
+Current Limit: Enforced in 
+
+src/components/MapComponent.tsx
+ within the fetchPermitData function (Line 246: .limit(500)).
+Data Source: Directly querying the ca_permits table via Supabase client.
+Rendering: Initialized as a geojson source in Mapbox (Line 453) with cluster: false.
+Missing Infrastructure: Although there is a folder structure for src/app/api/tiles/[z]/[x]/[y], it is currently empty and not serving tiles. The map is still relying on the direct 500-limit query.
+Recommendation: To fix the client's concern, we need to implement the SQL logic for ST_AsMVT in Supabase and hook up the /api/tiles route to serve these tiles to the map.
+Would you like me to go ahead and implement the Vector Tiles (MVT) route now to remove this limit?
 <!-- ================= AI Prometer/Developer notes ================== -->
 
 I am building a permit intelligence SaaS platform.
