@@ -38,26 +38,29 @@ Once a license is searched, the **RESULTS** section loads the "Builder Card." Th
 ### Section 3: Builder Activity Map
 A large, interactive map section pulled from **CA-Permits** data.
 * **Visuals:** A specialized Mapbox map isolated specifically for this builder.
-* **Map Pins:** Physical pins dropping on all project addresses associated with the contractor.
-* **Interactivity:** Clicking or hovering on a pin will reveal a small popup (e.g., "New Bld, 123 ABC Dr").
+* **Map Pins:** Physical pins dropping on all project addresses (New build, Basement, Alterations, Residential/Commercial).
+* **Interactivity:** Clicking or hovering on a pin will reveal a small popup with: Address, Permit Number, Project Type, Valuation, Date Issued, Work Description, and Residential/Commercial Label.
 
 ### Section 4: Summary Statistics
 Directly below the map, a grid of summary metrics will provide an at-a-glance overview of the builder's scale and history.
 * Total Permits Issued
 * Total Projects
-* Commercial Projects Count
-* Residential Projects Count
+* Total Commercial Projects
+* Total Residential Projects
 * Total Valuation (Aggregate sum)
 * Total Basement Projects
-* Total Hillside Projects
+* Total New Build Projects
+* Total Alteration Projects
+* Total Hillside/Grading Projects (if available)
 * *Note: The wireframe mentions "Architects they work with"; if this data exists in the permit records, it will be aggregated and displayed here.*
 
 ### Section 5: Permit / Project Result List
 A chronological, scrollable list of the contractor's permit history pulled from **CA-Permits**.
 * **Card Structure:** Each record will be a distinct row/card.
-* **Left Side Data:** Permit Number | Address | Valuation | Permit Link | Date Issued.
+* **Display Order:** Contractor/Builder Name, Matching project type count, Total Valuation, Price Indicator, List of addresses worked on, then the related permit records.
+* **Left Side Data:** Permit Number | Address | Valuation | Permit Type | Unit Count (if available) | Date Issued | Work Description.
 * **Right Side (Labels):** As strictly requested in the wireframe notes ("label on results to right side"), dynamic project tags will be aligned to the right. 
-  * Examples: `[New Build (Basement)]`, `[Hillside]`, `[New Bldg Retaining Wall]`, `[Alteration]`.
+  * Examples: `[New Build (Basement)]`, `[Hillside]`, `[Retaining Wall]`, `[Hillside Grading]`, `[Alteration]`, `[Residential]`, `[Commercial]`.
 
 ---
 
@@ -75,7 +78,7 @@ To achieve this design without disrupting the current application, we will use a
 
 ---
 
-## 4. Phase 3 Future-Proofing
+## 4. Phase 3 Infrastructure & Future-Proofing
 The underlying infrastructure built in this phase will be ready for the Enterprise updates:
-* **Price Indicator Integration:** The system and UI structure will include a placeholder for the future "Price Indicator" (Low, Moderate, High, Premium) calculated via valuation per square foot.
-* **Advanced CSLB Filtering:** The data relationships established now will allow future enterprise users to search and filter not just by license number, but by complete CSLB trade categories and geographic activity areas.
+* **Price Indicator / Builder Cost Level:** The system and UI structure will include a prepared placeholder for the "Price Indicator" (Low, Moderate, High, Premium / 1-5 rating / Cost index score). This will be calculated via project valuation per square foot, project type, and builder history from the final Builder Intelligence spreadsheet.
+* **Advanced CSLB Filtering:** The data relationships established now will allow future enterprise users to search and filter not just by license number, but by complete CSLB trade categories, specialties, project types, valuation ranges, and geographic activity areas.
