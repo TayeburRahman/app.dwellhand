@@ -62,6 +62,11 @@ A chronological, scrollable list of the contractor's permit history pulled from 
 * **Right Side (Labels):** As strictly requested in the wireframe notes ("label on results to right side"), dynamic project tags will be aligned to the right. 
   * Examples: `[New Build (Basement)]`, `[Hillside]`, `[Retaining Wall]`, `[Hillside Grading]`, `[Alteration]`, `[Residential]`, `[Commercial]`.
 
+### Section 6: Project Type Search / Filtering (Advanced Search)
+To support detailed builder discovery, the UI will include a secondary filter alongside the main search bar to group or filter by project type.
+* **Filter Options:** New Build, Basement, Hillside, Retaining Wall, Hillside Grading, Alteration, Residential, Commercial.
+* **Expected Result Display:** When a user filters (e.g., "New Build" -> "Basement"), the result cards will dynamically update to show contractors who match this specific criteria, including the number of matching builds, total valuation for those specific projects, and the specific addresses worked on.
+
 ---
 
 ## 3. Data Architecture & Merging Strategy (Zero Conflict)
@@ -73,7 +78,10 @@ To achieve this design without disrupting the current application, we will use a
 2. **`ca_permits` (Existing Source):** 
    * We will leverage the existing, highly tested permit database. 
    * By matching the searched `contractor_license`, we will instantly retrieve all map coordinates, valuations, issue dates, and project types.
-3. **Conflict Prevention:** 
+3. **Backend Filtering Logic (Project Type Search):**
+   * The Project Type filtering (Section 6) will be handled via dedicated Supabase backend queries on the `ca_permits` table (e.g., using `.ilike('permit_type', '%type%')` or `.eq('is_basement', true)`).
+   * This backend logic will dynamically aggregate the results (e.g., fetching only basement projects for a specific license) and compute the valuations/counts exclusively for the filtered subset before returning the data to the UI.
+4. **Conflict Prevention:** 
    * The new "Builder Activity Map" will be a lightweight, independent map component. It will **not** interfere with or alter the existing global Market Map (`MapComponent.tsx`). Both systems will operate safely in parallel.
 
 ---
