@@ -712,7 +712,8 @@ export default function MapComponent() {
       });
     }
 
-    handleSelectPermit(props.id || props.permit_number, props);
+    // Close side panel when a new popup is opened to avoid overlap
+    setIsSidePanelOpen(false);
 
     // Ensure any open popup is closed 
     if (popupRef.current) {
@@ -781,7 +782,8 @@ export default function MapComponent() {
       const btn = popupNode.querySelector('#view-details-btn');
       if (btn) {
         btn.addEventListener('click', () => {
-          handleSelectPermit(props.id || props.permit_number); // This will fetch full data and open side panel
+          // Pass props as initial data for instant sidebar feedback
+          handleSelectPermit(props.id || props.permit_number, props); 
           if (popupRef.current) {
             popupRef.current.remove();
             popupRef.current = null;
