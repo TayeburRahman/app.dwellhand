@@ -707,6 +707,7 @@ export default function MapComponent() {
       map.current.flyTo({
         center: coordinates,
         zoom: Math.max(map.current.getZoom(), 15.5),
+        offset: [0, 100], // Pushes the center down, effectively moving the point UP on screen
         essential: true,
         duration: 1500
       });
@@ -772,7 +773,13 @@ export default function MapComponent() {
       </div>
     `;
 
-    popupRef.current = new mapboxgl.Popup({ closeButton: true, className: 'premium-popup', offset: 15, maxWidth: '340px' })
+    popupRef.current = new mapboxgl.Popup({ 
+      closeButton: true, 
+      className: 'premium-popup', 
+      offset: 15, 
+      maxWidth: '340px',
+      anchor: 'bottom'
+    })
       .setLngLat(e.lngLat)
       .setDOMContent(popupNode)
       .addTo(map.current!);
