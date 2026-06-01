@@ -64,7 +64,9 @@ export default function DashboardPage() {
                   Data Engine: Synchronized
                 </div>
                 <span className="text-[10px] font-bold uppercase tracking-widest bg-indigo-50 px-2.5 py-1 rounded-full text-indigo-600 border border-indigo-100">
-                  {user?.user_metadata?.role === 'paid' ? 'Enterprise Access' : 'Professional Access'}
+                  {user?.user_metadata?.role === 'paid' || user?.user_metadata?.role === 'enterprise' ? 'Enterprise Access' : 
+                   user?.user_metadata?.role === 'commercial' ? 'Commercial Access' : 
+                   user?.user_metadata?.role === 'residential' ? 'Residential Access' : 'Personal Access'}
                 </span>
               </>
             )}

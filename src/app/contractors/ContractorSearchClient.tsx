@@ -1,29 +1,113 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { getLADBSLink } from '@/lib/utils';
+import dynamic from 'next/dynamic';
+import BuilderCard, { type BuilderProfile } from '@/components/BuilderCard';
+import SummaryStats from '@/components/SummaryStats';
+import PermitResultList, { type Permit } from '@/components/PermitResultList';
+import { Search, Shield, Lock, ArrowUpRight, Loader2 } from 'lucide-react';
 
-interface PermitResult {
-  address: string;
-  permit_type: string;
-  issue_date: string;
-  permit_number: string;
-  city: string;
-  valuation: number | null;
-  permit_link?: string;
+// Dynamic import to avoid SSR issues with Mapbox GL
+const ContractorMapView = dynamic(() => import('@/components/ContractorMapView'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[420px] rounded-2xl bg-slate-900/50 border border-slate-700 animate-pulse flex items-center justify-center">
+      <p className="text-slate-500 text-sm font-bold">Loading map…</p>
+    </div>
+  ),
+});
+
+// ─── Skeleton loaders ────────────────────────────────────────────────────────
+function CardSkeleton() {
+  return (
+    <div className="bg-white/80 border border-white/60 rounded-2xl overflow-hidden shadow-xl animate-pulse">
+      <div className="bg-gradient-to-br from-indigo-950 to-slate-900 p-6 h-36" />
+      <div className="p-6 grid grid-cols-2 gap-5">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-slate-200" />
+            <div className="flex-1">
+              <div className="h-2 w-20 bg-slate-200 rounded mb-2" />
+              <div className="h-4 w-32 bg-slate-100 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-const LADBS_BASE = 'https://www.ladbsservices2.lacity.org/OnlineServices/PermitReport/PcisPermitDetail?id1=';
+function StatsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 animate-pulse">
+      {Array.from({ length: 9 }).map((_, i) => (
+        <div key={i} className="bg-white/80 border border-white/60 rounded-2xl p-4 h-24" />
+      ))}
+    </div>
+  );
+}
 
+function ListSkeleton() {
+  return (
+    <div className="space-y-3 animate-pulse">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="bg-white/80 border border-white/60 rounded-2xl p-5 h-24" />
+      ))}
+    </div>
+  );
+}
+
+// ─── Upgrade wall for non-commercial users ────────────────────────────────────
+function UpgradePrompt() {
+  return (
+    <div className="max-w-2xl mx-auto px-6 py-20 text-center">
+      <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-indigo-100 to-violet-100 flex items-center justify-center">
+        <Lock className="w-9 h-9 text-indigo-500" />
+      </div>
+      <h2 className="text-2xl font-black text-indigo-950 mb-3">Commercial Access Required</h2>
+      <p className="text-slate-500 font-semibold leading-relaxed mb-8">
+        Builder Intelligence — including full permit history, activity maps, project classifications,
+        and business profiles — is available on the <strong className="text-indigo-700">Commercial Plan</strong>.
+      </p>
+      <a
+        href="/dashboard/settings"
+        className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm px-8 py-4 rounded-2xl shadow-lg shadow-indigo-200 transition-all active:scale-95"
+      >
+        Upgrade to Commercial <ArrowUpRight className="w-4 h-4" />
+      </a>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function ContractorSearchClient() {
   const supabase = createClient();
+
+  const [role, setRole] = useState<string | null>(null);
+  const [loadingRole, setLoadingRole] = useState(true);
+
   const [licenseInput, setLicenseInput] = useState('');
-  const [results, setResults] = useState<PermitResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [profile, setProfile] = useState<BuilderProfile | null>(null);
+  const [profileMissing, setProfileMissing] = useState(false);
+  const [permits, setPermits] = useState<Permit[]>([]);
+
+  // ── Fetch user role on mount ──
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setRole(user?.user_metadata?.role ?? null);
+      setLoadingRole(false);
+    })();
+  }, [supabase]);
+
+  const isCommercial = role === 'paid' || role === 'commercial' || role === 'enterprise';
+
+  // ── Search handler ──
   const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const license = licenseInput.trim();
@@ -32,171 +116,219 @@ export default function ContractorSearchClient() {
     setIsLoading(true);
     setError(null);
     setSearched(false);
+    setProfile(null);
+    setPermits([]);
+    setProfileMissing(false);
 
-    // Query against contractor_license index — Supabase query level only
-    const { data, error: dbError } = await supabase
-      .from('ca_permits')
-      .select('address, permit_type, issue_date, permit_number, city, valuation, permit_link')
-      .ilike('contractor_license', `%${license}%`)
-      .order('issue_date', { ascending: false })
-      .limit(200);
+    try {
+      const [profileRes, permitsRes] = await Promise.all([
+        fetch(`/api/contractors/profile?license=${encodeURIComponent(license)}`),
+        fetch(`/api/contractors/permits?license=${encodeURIComponent(license)}`),
+      ]);
 
-    setIsLoading(false);
-    setSearched(true);
+      if (!profileRes.ok || !permitsRes.ok) {
+        const pErr = await profileRes.json().catch(() => ({}));
+        const mErr = await permitsRes.json().catch(() => ({}));
+        throw new Error(pErr.error || mErr.error || 'Server error fetching builder data.');
+      }
 
-    if (dbError) {
-      setError(dbError.message);
-      return;
+      const profileJson = await profileRes.json();
+      const permitsJson = await permitsRes.json();
+
+      setProfile(profileJson.profile ?? null);
+      setProfileMissing(profileJson.profile === null);
+      setPermits(permitsJson.permits ?? []);
+    } catch (err: any) {
+      setError(err.message ?? 'Unexpected error. Please try again.');
+    } finally {
+      setIsLoading(false);
+      setSearched(true);
     }
+  }, [licenseInput]);
 
-    setResults(data || []);
-  }, [licenseInput, supabase]);
+  // ── Loading role shell ──
+  if (loadingRole) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-slate-50">
-      {/* Page Header */}
-      <div className="bg-white border-b border-slate-200 px-8 py-6">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center flex-shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-slate-50">
+      {/* ── Page Header ── */}
+      <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200/60 px-8 py-6 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+              <Search className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-indigo-950 leading-none">Contractor License Search</h1>
+              <p className="text-slate-400 text-xs font-bold mt-0.5">Look up permits tied to a contractor's license.</p>
+            </div>
           </div>
-          <h1 className="text-xl font-black text-slate-900">Contractor License Search</h1>
+          <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-lg ${isCommercial ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-slate-100 text-slate-500 shadow-slate-100 border border-slate-200'}`}>
+            <Shield className="w-3.5 h-3.5" />
+            {isCommercial ? 'Commercial Subscription' : 'Regular Access (Upgrade Available)'}
+          </div>
         </div>
-        <p className="text-slate-500 text-sm ml-11">
-          Look up all permits tied to a contractor license number. Queried directly against the Supabase index.
-        </p>
       </div>
 
-      {/* Search Form */}
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <form onSubmit={handleSearch} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-8">
-          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-            Contractor License Number
-          </label>
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={licenseInput}
-              onChange={(e) => setLicenseInput(e.target.value)}
-              placeholder="e.g. B-123456 or 987654"
-              className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 font-semibold text-sm outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all placeholder:text-slate-400"
-              disabled={isLoading}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !licenseInput.trim()}
-              className="px-6 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg>
-                  Searching...
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  Search
-                </>
-              )}
-            </button>
-          </div>
-          <p className="text-xs text-slate-400 mt-3">
-            Partial matches supported. Returns up to 200 most recent permits. Phase 3 will add full builder profile pages.
-          </p>
-        </form>
+      {/* ── Content ── */}
+      <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
 
-        {/* Error */}
+        {/* ── Section 1: Search form (Always Visible) ── */}
+        <div className="bg-white/80 backdrop-blur-sm border border-white/60 rounded-2xl shadow-xl shadow-indigo-100/40 p-7">
+          <form onSubmit={handleSearch}>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
+              Contractor License Number
+            </label>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={licenseInput}
+                onChange={e => setLicenseInput(e.target.value)}
+                placeholder="#1083426"
+                disabled={isLoading}
+                className="flex-1 border border-slate-200 rounded-xl px-5 py-3.5 text-slate-800 font-black text-base outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder:text-slate-300 bg-white/80"
+              />
+              <button
+                type="submit"
+                disabled={isLoading || !licenseInput.trim()}
+                className="px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm shadow-lg shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isLoading ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Searching…</>
+                ) : (
+                  <><Search className="w-4 h-4" /> Search</>
+                )}
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 font-bold mt-3">
+              Type in a contractor's license number to see build history and activity.
+              Partial matches are supported.
+            </p>
+          </form>
+        </div>
+
+        {/* ── Error ── */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-6 text-sm font-semibold">
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-5 font-bold text-sm">
             ⚠️ {error}
           </div>
         )}
 
-        {/* Results */}
-        {searched && !isLoading && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-slate-900 text-lg">
-                {results.length === 0
-                  ? 'No permits found'
-                  : `${results.length} permit${results.length !== 1 ? 's' : ''} found`}
-              </h2>
-              {results.length > 0 && (
-                <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-full">
-                  Max 200 results — Phase 3 unlocks full history
-                </span>
-              )}
-            </div>
-
-            {results.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center">
-                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                </div>
-                <p className="text-slate-500 font-semibold">No permits found for license <span className="text-slate-800">&quot;{licenseInput}&quot;</span></p>
-                <p className="text-slate-400 text-sm mt-1">Try a partial number or check for typos.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {results.map((permit) => (
-                  <div
-                    key={permit.permit_number}
-                    className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-slate-300 hover:shadow-md transition-all group"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-900 text-base truncate group-hover:text-slate-700 transition-colors">
-                          {permit.address}
-                        </p>
-                        <p className="text-xs font-semibold text-slate-400 mt-0.5">{permit.city}</p>
-
-                        <div className="flex flex-wrap items-center gap-2 mt-3">
-                          <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
-                            {permit.permit_type || 'Unknown Type'}
-                          </span>
-                          <span className="text-xs text-slate-400 font-semibold">
-                            📅 {permit.issue_date || 'N/A'}
-                          </span>
-                          {permit.permit_number && (
-                            <span className="text-xs text-slate-400 font-semibold">
-                              # {permit.permit_number}
-                            </span>
-                          )}
-                          {permit.valuation && permit.valuation >= 10000 && (
-                            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
-                              ${Number(permit.valuation).toLocaleString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {permit.permit_number && (
-                        <a
-                          href={getLADBSLink(permit.permit_number, permit.permit_link)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-shrink-0 flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                          LADBS
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* ── Loading skeletons ── */}
+        {isLoading && (
+          <div className="space-y-10">
+            <CardSkeleton />
+            <StatsSkeleton />
+            <div className="w-full h-[420px] rounded-2xl bg-slate-900/50 border border-slate-700 animate-pulse" />
+            <ListSkeleton />
           </div>
         )}
 
-        {/* Initial empty state */}
-        {!searched && !isLoading && (
-          <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-16 text-center">
-            <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        {/* ── Results ── */}
+        {searched && !isLoading && (
+          <div className="relative">
+            {/* Paywall Overlay for Non-Commercial Users */}
+            {!isCommercial && permits.length > 0 && (
+              <div className="absolute inset-0 z-30 flex flex-col items-center justify-start pt-32 px-6">
+                <div className="bg-white/95 backdrop-blur-md border border-indigo-100 rounded-3xl p-10 shadow-2xl shadow-indigo-200/50 max-w-lg text-center sticky top-40 mx-auto">
+                  <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+                    <Lock className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-xl font-black text-indigo-950 mb-3">Unlock Builder Intelligence</h3>
+                  <p className="text-slate-500 font-bold text-sm leading-relaxed mb-8">
+                    You're seeing a preview of the data. Upgrade to the **Commercial Plan** to unlock complete business profiles,
+                    permit histories, activity maps, and project valuations.
+                  </p>
+                  <a
+                    href="/dashboard/settings"
+                    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm px-8 py-4 rounded-2xl shadow-xl shadow-indigo-200 transition-all active:scale-95 w-full justify-center"
+                  >
+                    Upgrade for Full Access <ArrowUpRight className="w-4 h-4" />
+                  </a>
+                  <p className="text-[10px] font-bold text-slate-400 mt-4 uppercase tracking-widest">
+                    Commercial license required for raw data exports
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Results Container (Blurred for homeowners) */}
+            <div className={`space-y-10 transition-all duration-500 ${!isCommercial && permits.length > 0 ? 'blur-md pointer-events-none select-none grayscale-[0.3]' : ''}`}>
+              {permits.length === 0 && !profile ? (
+                /* Total empty state */
+                <div className="bg-white/80 border border-white/60 rounded-2xl p-16 text-center shadow-xl shadow-indigo-100/30">
+                  <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Search className="w-6 h-6 text-indigo-300" />
+                  </div>
+                  <p className="font-black text-slate-700 text-lg mb-1">No data found</p>
+                  <p className="text-slate-400 text-sm font-bold">
+                    License &quot;{licenseInput}&quot; has no records in our database.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* ── Section 2: Builder Card ── */}
+                  {profile ? (
+                    <BuilderCard profile={profile} permits={permits} />
+                  ) : profileMissing && permits.length > 0 ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm font-bold text-amber-800">
+                      ℹ️ No official Builder Intelligence profile found for this license — showing permit data only.
+                    </div>
+                  ) : null}
+
+                  {/* ── Section 3: Summary Stats ── */}
+                  {permits.length > 0 && <SummaryStats permits={permits} />}
+
+                  {/* ── Section 4: Builder Activity Map ── */}
+                  {permits.length > 0 && (
+                    <ContractorMapView permits={permits} />
+                  )}
+
+                  {/* ── Section 5: Permit / Project Result List ── */}
+                  {permits.length > 0 && (
+                    <PermitResultList permits={permits} />
+                  )}
+
+                  {permits.length === 0 && (
+                    <div className="bg-white/80 border border-white/60 rounded-2xl p-10 text-center">
+                      <p className="font-bold text-slate-500">No permits found for this license number.</p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-            <p className="font-bold text-slate-700 text-base mb-1">Enter a contractor license number above</p>
-            <p className="text-slate-400 text-sm">All permits tied to that license will appear here.</p>
+          </div>
+        )}
+
+        {/* Initial empty state (Always Visible) ── */}
+        {!searched && !isLoading && (
+          <div className="bg-white/60 border-2 border-dashed border-indigo-100 rounded-2xl p-20 text-center">
+            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+              <Search className="w-7 h-7 text-indigo-300" />
+            </div>
+            <p className="font-black text-indigo-950 text-lg mb-2">Builder Intelligence</p>
+            <p className="text-slate-400 font-bold text-sm leading-relaxed max-w-md mx-auto">
+              Enter a CSLB contractor license number above to see the full business profile,
+              permit history, activity map, and project type breakdown.
+            </p>
+            {!isCommercial && (
+              <p className="text-indigo-600 font-black text-[10px] uppercase tracking-widest mt-4">
+                ✨ Preview available for regular subscribers
+              </p>
+            )}
+            <div className="flex justify-center gap-4 mt-8 flex-wrap text-[10px] font-black uppercase tracking-widest">
+              {['Builder Card', 'Activity Map', 'Stats Grid', 'Permit History', 'Project Labels'].map(f => (
+                <span key={f} className="px-3 py-1.5 bg-indigo-50 text-indigo-500 rounded-full border border-indigo-100">
+                  {f}
+                </span>
+              ))}
+            </div>
           </div>
         )}
       </div>

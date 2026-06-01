@@ -105,11 +105,32 @@ export default function MapComponent() {
   const [selectedPermit, setSelectedPermit] = useState<any>(null);
   const [addressPermits, setAddressPermits] = useState<any[]>([]);
   const sidePanelContentRef = useRef<HTMLDivElement>(null);
-  const [currentTier, setCurrentTier] = useState('FREE'); // Set tier for testing
+  const [currentTier, setCurrentTier] = useState('FREE'); 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [sortBy, setSortBy] = useState<'most_active' | 'valuation' | 'name_az' | 'years_biz' | null>(null);
   const [selectedCity, setSelectedCity] = useState<CityKey>('all');
+
+  const supabase = createClient();
+
+  // ── ROLE & TIER SYNC ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchUserTier = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const role = user?.user_metadata?.role;
+
+      if (role === 'paid' || role === 'enterprise') {
+        setCurrentTier('ENTERPRISE');
+      } else if (role === 'commercial') {
+        setCurrentTier('COMMERCIAL');
+      } else if (role === 'residential') {
+        setCurrentTier('RESIDENTIAL');
+      } else {
+        setCurrentTier('FREE');
+      }
+    };
+    fetchUserTier();
+  }, [supabase.auth]);
 
   // Update highlight layer when selection changes
   useEffect(() => {
@@ -209,7 +230,6 @@ export default function MapComponent() {
     Demolition: false, Roofing: false, Septic: false,
   });
 
-  const supabase = createClient();
 
   // Fetch from Supabase using Viewport Bounds
   const fetchPermitData = useCallback(async () => {
