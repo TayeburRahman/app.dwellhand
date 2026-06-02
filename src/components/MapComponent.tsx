@@ -98,6 +98,7 @@ export default function MapComponent() {
   const [mapStyle, setMapStyle] = useState<string>(MAP_STYLES.DARK);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [enterpriseLoading, setEnterpriseLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const [isListViewOpen, setIsListViewOpen] = useState(true);
@@ -676,6 +677,34 @@ export default function MapComponent() {
         colorType = 'Commercial';
       }
 
+      // 3. Fetch Enterprise Stats (Permits Pulled & Addresses Worked)
+      let permitsPulled: number | string | null = null;
+      let addressesWorked: number | string | null = null;
+
+      if (d.contractor_license) {
+        setEnterpriseLoading(true);
+        // Fetch total permits pulled by this contractor
+        const { count: pCount } = await supabase
+          .from('ca_permits')
+          .select('permit_number', { count: 'exact', head: true })
+          .eq('contractor_license', d.contractor_license);
+
+        if (pCount !== null) permitsPulled = pCount;
+
+        // Fetch unique addresses worked on by this contractor (up to 1000 for performance)
+        const { data: pData } = await supabase
+          .from('ca_permits')
+          .select('address')
+          .eq('contractor_license', d.contractor_license)
+          .limit(1000);
+
+        if (pData) {
+          const uniqueAddrs = new Set(pData.map(r => r.address).filter(Boolean));
+          addressesWorked = uniqueAddrs.size.toString() + (pData.length === 1000 ? '+' : '');
+        }
+        setEnterpriseLoading(false);
+      }
+
       const freshProps = {
         id: d.permit_number,
         address: d.address || 'Unknown Address',
@@ -703,8 +732,8 @@ export default function MapComponent() {
         engineer: d.engineer,
         engineer_license: d.engineer_license,
         permit_link: d.permit_link,
-        permits_pulled: null,
-        addresses_worked_on: null
+        permits_pulled: permitsPulled,
+        addresses_worked_on: addressesWorked
       };
 
       setSelectedPermit(freshProps);
@@ -1170,10 +1199,21 @@ export default function MapComponent() {
                     <h3 className="font-bold text-sm text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-2 flex items-center justify-between">
                       Enterprise <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">$175/mo</span>
                     </h3>
-                    <div className="grid grid-cols-2 gap-y-4 gap-x-2">
-                      <LockedField label="Permits Pulled" value={selectedPermit.permits_pulled} requiredTier="ENTERPRISE" currentTier={currentTier} />
-                      <LockedField label="Addresses Worked" value={selectedPermit.addresses_worked_on} requiredTier="ENTERPRISE" currentTier={currentTier} />
-                    </div>
+                    {enterpriseLoading ? (
+                      <div className="grid grid-cols-2 gap-y-4 gap-x-2">
+                        {[0, 1].map(i => (
+                          <div key={i} className="space-y-1.5 animate-pulse">
+                            <div className="h-2.5 w-24 bg-slate-200 rounded" />
+                            <div className="h-5 w-16 bg-slate-100 rounded" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-y-4 gap-x-2">
+                        <LockedField label="Permits Pulled" value={selectedPermit.permits_pulled} requiredTier="ENTERPRISE" currentTier={currentTier} />
+                        <LockedField label="Addresses Worked" value={selectedPermit.addresses_worked_on} requiredTier="ENTERPRISE" currentTier={currentTier} />
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (
