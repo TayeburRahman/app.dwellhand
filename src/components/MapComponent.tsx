@@ -105,7 +105,7 @@ export default function MapComponent() {
   const [selectedPermit, setSelectedPermit] = useState<any>(null);
   const [addressPermits, setAddressPermits] = useState<any[]>([]);
   const sidePanelContentRef = useRef<HTMLDivElement>(null);
-  const [currentTier, setCurrentTier] = useState('FREE'); 
+  const [currentTier, setCurrentTier] = useState('FREE');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [sortBy, setSortBy] = useState<'most_active' | 'valuation' | 'name_az' | 'years_biz' | null>(null);
@@ -793,10 +793,10 @@ export default function MapComponent() {
       </div>
     `;
 
-    popupRef.current = new mapboxgl.Popup({ 
-      closeButton: true, 
-      className: 'premium-popup', 
-      offset: 15, 
+    popupRef.current = new mapboxgl.Popup({
+      closeButton: true,
+      className: 'premium-popup',
+      offset: 15,
       maxWidth: '340px',
       anchor: 'bottom'
     })
@@ -810,7 +810,7 @@ export default function MapComponent() {
       if (btn) {
         btn.addEventListener('click', () => {
           // Pass props as initial data for instant sidebar feedback
-          handleSelectPermit(props.id || props.permit_number, props); 
+          handleSelectPermit(props.id || props.permit_number, props);
           if (popupRef.current) {
             popupRef.current.remove();
             popupRef.current = null;

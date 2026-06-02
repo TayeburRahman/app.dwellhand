@@ -79,18 +79,18 @@ interface PermitResultListProps {
 
 export default function PermitResultList({ permits }: PermitResultListProps) {
   const [activeFilter, setActiveFilter] = useState('all');
-  const [showAll, setShowAll] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(30);
 
   const filtered = useMemo(
     () => permits.filter(p => filterPermit(p, activeFilter)),
     [permits, activeFilter]
   );
 
-  const visible = showAll ? filtered : filtered.slice(0, 30);
+  const visible = filtered.slice(0, visibleCount);
 
   const handleFilter = useCallback((key: string) => {
     setActiveFilter(key);
-    setShowAll(false);
+    setVisibleCount(30);
   }, []);
 
   return (
@@ -209,12 +209,12 @@ export default function PermitResultList({ permits }: PermitResultListProps) {
       </div>
 
       {/* Show more */}
-      {!showAll && filtered.length > 30 && (
+      {filtered.length > visibleCount && (
         <button
-          onClick={() => setShowAll(true)}
+          onClick={() => setVisibleCount(prev => prev + 50)}
           className="w-full mt-4 py-3 text-sm font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-2xl border border-indigo-200 transition-colors"
         >
-          Show {filtered.length - 30} more permits ↓
+          Show more permits ({filtered.length - visibleCount} remaining) ↓
         </button>
       )}
     </div>

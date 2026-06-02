@@ -12,7 +12,7 @@ export async function GET() {
     password,
     options: {
       data: {
-        role: 'commercial'
+        role: 'enterprise'
       }
     }
   });

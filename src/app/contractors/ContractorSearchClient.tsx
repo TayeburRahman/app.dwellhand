@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import dynamic from 'next/dynamic';
 import BuilderCard, { type BuilderProfile } from '@/components/BuilderCard';
@@ -105,6 +105,29 @@ export default function ContractorSearchClient() {
     })();
   }, [supabase]);
 
+  // ── Scroll/Visibility Listener for Sticky Header Search ──
+  const [isScrolled, setIsScrolled] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = searchContainerRef.current;
+    if (!el) return;
+
+    // The page scrolls inside <main> (dashboard layout), not window.
+    // Find the scrollable parent to use as the IntersectionObserver root.
+    const scrollParent = el.closest('main') ?? null;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsScrolled(!entry.isIntersecting);
+      },
+      { root: scrollParent, threshold: 0, rootMargin: '0px' }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const isCommercial = role === 'paid' || role === 'commercial' || role === 'enterprise';
 
   // ── Search handler ──
@@ -158,20 +181,42 @@ export default function ContractorSearchClient() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-slate-50">
       {/* ── Page Header ── */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200/60 px-8 py-6 sticky top-0 z-20 shadow-sm">
+      <div className={`bg-white/90 backdrop-blur-md border-b border-slate-200/60 px-6 sm:px-8 py-4 sticky top-0 z-40 transition-all duration-300 ${isScrolled ? 'shadow-md py-3' : 'shadow-sm py-5'}`}>
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
               <Search className="w-4 h-4 text-white" />
             </div>
-            <div>
+            <div className={`transition-all duration-300 ${isScrolled ? 'hidden md:block' : 'block'}`}>
               <h1 className="text-xl font-black text-indigo-950 leading-none">Contractor License Search</h1>
               <p className="text-slate-400 text-xs font-bold mt-0.5">Look up permits tied to a contractor's license.</p>
             </div>
           </div>
-          <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-lg ${isCommercial ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-slate-100 text-slate-500 shadow-slate-100 border border-slate-200'}`}>
+
+          {/* Compact Search for Header */}
+          <div className={`flex-1 max-w-sm transition-all duration-300 ease-in-out origin-left ${isScrolled ? 'opacity-100 scale-100 w-full' : 'opacity-0 scale-95 w-0 overflow-hidden pointer-events-none'}`}>
+            <form onSubmit={handleSearch} className="flex gap-2">
+              <input
+                type="text"
+                value={licenseInput}
+                onChange={e => setLicenseInput(e.target.value)}
+                placeholder="Enter License #"
+                disabled={isLoading}
+                className="flex-1 w-full border border-slate-200 rounded-xl px-4 py-2 text-slate-800 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              />
+              <button
+                type="submit"
+                disabled={isLoading || !licenseInput.trim()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm flex items-center gap-1.5 transition-all disabled:opacity-50"
+              >
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              </button>
+            </form>
+          </div>
+
+          <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-lg shrink-0 ${isCommercial ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-slate-100 text-slate-500 shadow-slate-100 border border-slate-200'}`}>
             <Shield className="w-3.5 h-3.5" />
-            {isCommercial ? 'Commercial Subscription' : 'Regular Access (Upgrade Available)'}
+            <span className="hidden lg:inline">{isCommercial ? 'Commercial Subscription' : 'Regular Access'}</span>
           </div>
         </div>
       </div>
@@ -180,7 +225,7 @@ export default function ContractorSearchClient() {
       <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
 
         {/* ── Section 1: Search form (Always Visible) ── */}
-        <div className="bg-white/80 backdrop-blur-sm border border-white/60 rounded-2xl shadow-xl shadow-indigo-100/40 p-7">
+        <div ref={searchContainerRef} className="bg-white/80 backdrop-blur-sm border border-white/60 rounded-2xl shadow-xl shadow-indigo-100/40 p-7">
           <form onSubmit={handleSearch}>
             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
               Contractor License Number
