@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         'address, city, state, zip_code, permit_type, issue_date, permit_number, ' +
         'valuation, permit_link, is_commercial, is_residential, is_basement, ' +
         'is_hillside, latitude, longitude, work_description, project_type, ' +
-        'project_category, contractor'
+        'project_category, contractor, square_feet, status'
       )
       .gte('contractor_license', license)
       .lt('contractor_license', license + '~')

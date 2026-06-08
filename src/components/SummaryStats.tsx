@@ -10,6 +10,7 @@ interface Permit {
   is_basement: boolean | null;
   is_hillside: boolean | null;
   permit_type: string | null;
+  project_type?: string | null;
 }
 
 interface SummaryStatsProps {
@@ -37,7 +38,7 @@ function StatCard({
           <Icon className="w-3.5 h-3.5 text-white" />
         </div>
       </div>
-      <p className="text-2xl font-black text-indigo-950 tracking-tight">{value}</p>
+      <p className="text-2xl font-black text-emerald-950 tracking-tight">{value}</p>
       {sub && <p className="text-[10px] font-bold text-slate-400 mt-1">{sub}</p>}
     </div>
   );
@@ -57,9 +58,17 @@ export default function SummaryStats({ permits }: SummaryStatsProps) {
     const alteration = permits.filter(p =>
       p.permit_type?.toLowerCase().includes('alter') || p.permit_type?.toLowerCase().includes('renovation')
     ).length;
+    const nonBldg = permits.filter(p => 
+      p.permit_type?.toLowerCase().includes('nonbldg') || 
+      p.permit_type?.toLowerCase().includes('non-bldg') || 
+      p.project_type?.toLowerCase().includes('nonbldg') || 
+      p.project_type?.toLowerCase().includes('non-bldg') ||
+      p.project_type?.toLowerCase().includes('non building') ||
+      p.permit_type?.toLowerCase().includes('non building')
+    ).length;
     const avgVal = total > 0 ? Math.round(totalVal / total) : 0;
 
-    return { total, totalVal, residential, commercial, basement, hillside, newBuild, alteration, avgVal };
+    return { total, totalVal, residential, commercial, basement, hillside, newBuild, alteration, nonBldg, avgVal };
   }, [permits]);
 
   const fmt = (n: number) => n.toLocaleString();
@@ -72,16 +81,16 @@ export default function SummaryStats({ permits }: SummaryStatsProps) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
-        <div className="w-1.5 h-5 bg-indigo-500 rounded-full" />
+        <div className="w-1.5 h-5 bg-emerald-500 rounded-full" />
         <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Builder Summary</h3>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
         <StatCard
-          label="Total Permits"
+          label="Total Projects"
           value={fmt(stats.total)}
           sub="All time"
           icon={BarChart3}
-          color="bg-indigo-500"
+          color="bg-emerald-600"
         />
         <StatCard
           label="Total Valuation"
@@ -116,14 +125,14 @@ export default function SummaryStats({ permits }: SummaryStatsProps) {
           value={fmt(stats.basement)}
           sub="Basement projects"
           icon={Layers}
-          color="bg-amber-500"
+          color="bg-stone-500"
         />
         <StatCard
-          label="Hillside / Grading"
+          label="Hillside/Slope-side"
           value={fmt(stats.hillside)}
           sub="Slope & grading"
           icon={Mountain}
-          color="bg-rose-500"
+          color="bg-amber-800"
         />
         <StatCard
           label="Alterations"
@@ -133,11 +142,18 @@ export default function SummaryStats({ permits }: SummaryStatsProps) {
           color="bg-slate-500"
         />
         <StatCard
+          label="NonBldg"
+          value={fmt(stats.nonBldg)}
+          sub="Non-building work"
+          icon={Building2}
+          color="bg-orange-700"
+        />
+        <StatCard
           label="Avg Valuation"
           value={fmtVal(stats.avgVal)}
           sub="Per project"
           icon={BarChart3}
-          color="bg-indigo-400"
+          color="bg-teal-500"
         />
       </div>
     </div>

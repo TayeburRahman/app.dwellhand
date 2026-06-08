@@ -66,17 +66,17 @@ export default function BuilderCard({ profile, permits }: BuilderCardProps) {
   const statusDot = STATUS_STYLES[profile.license_status ?? ''] ?? 'bg-slate-400';
 
   return (
-    <div className="bg-white/80 backdrop-blur-sm border border-white/60 rounded-2xl shadow-xl shadow-indigo-100/40 overflow-hidden">
+    <div className="bg-white/80 backdrop-blur-sm border border-emerald-100 rounded-2xl shadow-xl shadow-emerald-100/40 overflow-hidden">
       {/* Header */}
-      <div className="bg-gradient-to-br from-indigo-950 to-slate-900 p-6 text-white relative overflow-hidden">
+      <div className="bg-gradient-to-br from-emerald-900 to-emerald-950 p-6 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #6366f1 0%, transparent 60%)' }} />
+          style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #10b981 0%, transparent 60%)' }} />
         <div className="relative z-10">
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <div className={`w-2 h-2 rounded-full ${statusDot} animate-pulse`} />
-                <span className="text-xs font-bold uppercase tracking-widest text-indigo-300">
+                <span className="text-xs font-bold uppercase tracking-widest text-emerald-200">
                   {profile.license_status ?? 'Unknown Status'}
                 </span>
               </div>
@@ -84,7 +84,7 @@ export default function BuilderCard({ profile, permits }: BuilderCardProps) {
                 {profile.business_name ?? 'Business Name Unavailable'}
               </h2>
               {profile.owner_name && (
-                <p className="text-sm text-indigo-200 mt-1 flex items-center gap-1.5">
+                <p className="text-sm text-emerald-100 mt-1 flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5" />
                   {profile.owner_name}
                 </p>
@@ -96,7 +96,7 @@ export default function BuilderCard({ profile, permits }: BuilderCardProps) {
                 {profile.price_indicator}
               </span>
             ) : (
-              <span className="text-xs font-bold text-indigo-400 bg-white/10 px-3 py-1.5 rounded-full border border-white/20">
+              <span className="text-xs font-bold text-emerald-300 bg-white/10 px-3 py-1.5 rounded-full border border-white/20">
                 Price TBD
               </span>
             )}
@@ -104,12 +104,20 @@ export default function BuilderCard({ profile, permits }: BuilderCardProps) {
 
           {/* Classification badges */}
           <div className="flex gap-2 mt-4 flex-wrap">
-            <span className={`text-xs font-black px-3 py-1 rounded-full ${residentialPct >= commercialPct ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-white/10 text-indigo-300 border border-white/20'}`}>
-              🏠 Primarily Residential
-            </span>
-            <span className={`text-xs font-black px-3 py-1 rounded-full ${commercialPct > residentialPct ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-white/10 text-indigo-300 border border-white/20'}`}>
-              🏢 Primarily Commercial
-            </span>
+            {residentialPct >= commercialPct ? (
+              <span className="text-xs font-black px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
+                🏠 Primarily Residential
+              </span>
+            ) : (
+              <span className="text-xs font-black px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
+                🏢 Primarily Commercial
+              </span>
+            )}
+            {profile.issue_date && (
+              <span className="text-xs font-black px-3 py-1 rounded-full bg-white/10 text-emerald-200 border border-white/20">
+                {new Date().getFullYear() - new Date(profile.issue_date).getFullYear()} Years in Business
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -118,17 +126,17 @@ export default function BuilderCard({ profile, permits }: BuilderCardProps) {
       {permits.length > 0 && (
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-100">
           <div className="flex items-center gap-3 text-xs font-bold text-slate-600 mb-1.5">
-            <span className="text-emerald-600">Residential {residentialPct}%</span>
+            <span className="text-emerald-700">Residential {residentialPct}%</span>
             <span className="text-slate-300">|</span>
-            <span className="text-blue-600">Commercial {commercialPct}%</span>
+            <span className="text-teal-700">Commercial {commercialPct}%</span>
           </div>
           <div className="h-2 rounded-full bg-slate-200 overflow-hidden flex">
             <div
-              className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-700"
+              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 transition-all duration-700"
               style={{ width: `${residentialPct}%` }}
             />
             <div
-              className="h-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all duration-700"
+              className="h-full bg-gradient-to-r from-teal-500 to-teal-600 transition-all duration-700"
               style={{ width: `${commercialPct}%` }}
             />
           </div>
@@ -141,8 +149,8 @@ export default function BuilderCard({ profile, permits }: BuilderCardProps) {
         {/* Address */}
         {profile.business_address && (
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <MapPin className="w-4 h-4 text-indigo-500" />
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <MapPin className="w-4 h-4 text-emerald-600" />
             </div>
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Business Address</p>
@@ -160,8 +168,8 @@ export default function BuilderCard({ profile, permits }: BuilderCardProps) {
 
         {/* License Number */}
         <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Hash className="w-4 h-4 text-indigo-500" />
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Hash className="w-4 h-4 text-emerald-600" />
           </div>
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">License Number</p>
@@ -172,8 +180,8 @@ export default function BuilderCard({ profile, permits }: BuilderCardProps) {
         {/* Entity Type */}
         {profile.entity_type && (
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Building2 className="w-4 h-4 text-indigo-500" />
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Building2 className="w-4 h-4 text-emerald-600" />
             </div>
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Entity Type</p>
@@ -185,8 +193,8 @@ export default function BuilderCard({ profile, permits }: BuilderCardProps) {
         {/* License Class */}
         {profile.license_class && (
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Shield className="w-4 h-4 text-indigo-500" />
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Shield className="w-4 h-4 text-emerald-600" />
             </div>
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">License Class</p>
@@ -198,8 +206,8 @@ export default function BuilderCard({ profile, permits }: BuilderCardProps) {
         {/* Issue Date */}
         {profile.issue_date && (
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Calendar className="w-4 h-4 text-emerald-500" />
+            <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Calendar className="w-4 h-4 text-teal-600" />
             </div>
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">License Issued</p>
