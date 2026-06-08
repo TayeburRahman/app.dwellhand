@@ -95,6 +95,7 @@ export default function ContractorSearchClient() {
   const [profile, setProfile] = useState<BuilderProfile | null>(null);
   const [profileMissing, setProfileMissing] = useState(false);
   const [permits, setPermits] = useState<Permit[]>([]);
+  const [viewportPermits, setViewportPermits] = useState<Permit[] | null>(null);
 
   // ── Fetch user role on mount ──
   useEffect(() => {
@@ -141,6 +142,7 @@ export default function ContractorSearchClient() {
     setSearched(false);
     setProfile(null);
     setPermits([]);
+    setViewportPermits(null);
     setProfileMissing(false);
 
     try {
@@ -332,12 +334,12 @@ export default function ContractorSearchClient() {
 
                   {/* ── Section 4: Builder Activity Map ── */}
                   {permits.length > 0 && (
-                    <ContractorMapView permits={permits} />
+                    <ContractorMapView permits={permits} onViewportChange={setViewportPermits} />
                   )}
 
                   {/* ── Section 5: Permit / Project Result List ── */}
                   {permits.length > 0 && (
-                    <PermitResultList permits={permits} />
+                    <PermitResultList permits={viewportPermits ?? permits} />
                   )}
 
                   {permits.length === 0 && (

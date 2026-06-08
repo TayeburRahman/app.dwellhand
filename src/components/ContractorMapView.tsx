@@ -1,29 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useMemo, useState } from 'react';
+import { getLADBSLink } from '@/lib/utils';
 
-interface Permit {
-  address: string | null;
-  permit_number: string | null;
-  permit_type: string | null;
-  valuation: number | null;
-  issue_date: string | null;
-  work_description: string | null;
-  is_commercial: boolean | null;
-  is_residential: boolean | null;
-  is_basement: boolean | null;
-  is_hillside: boolean | null;
-  latitude: number | null;
-  longitude: number | null;
-}
+import { Permit } from '@/components/PermitResultList';
 
 interface ContractorMapViewProps {
   permits: Permit[];
+  onViewportChange?: (visiblePermits: Permit[]) => void;
 }
 
 function getPinColor(permit: Permit): string {
-  if (permit.is_hillside)   return '#f43f5e';   // rose
-  if (permit.is_basement)   return '#f59e0b';   // amber
+  if (permit.is_hillside) return '#f43f5e';   // rose
+  if (permit.is_basement) return '#f59e0b';   // amber
   if (permit.is_commercial) return '#3b82f6';   // blue
   return '#10b981';                              // emerald (residential default)
 }
@@ -31,20 +20,20 @@ function getPinColor(permit: Permit): string {
 function formatVal(v: number | null) {
   if (!v) return 'N/A';
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000)     return `$${(v / 1_000).toFixed(0)}K`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
   return `$${v}`;
 }
 
 const LEGEND = [
   { label: 'Residential', color: '#10b981' },
-  { label: 'Commercial',  color: '#3b82f6' },
-  { label: 'Basement',    color: '#f59e0b' },
-  { label: 'Hillside',    color: '#f43f5e' },
+  { label: 'Commercial', color: '#3b82f6' },
+  { label: 'Basement', color: '#f59e0b' },
+  { label: 'Hillside', color: '#f43f5e' },
 ];
 
-export default function ContractorMapView({ permits }: ContractorMapViewProps) {
+export default function ContractorMapView({ permits, onViewportChange }: ContractorMapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const mapRef       = useRef<any>(null);
+  const mapRef = useRef<any>(null);
   const [ready, setReady] = useState(false);
 
   const validPermits = useMemo(
@@ -55,9 +44,9 @@ export default function ContractorMapView({ permits }: ContractorMapViewProps) {
   // Stats
   const stats = useMemo(() => ({
     residential: validPermits.filter(p => p.is_residential).length,
-    commercial:  validPermits.filter(p => p.is_commercial).length,
-    basement:    validPermits.filter(p => p.is_basement).length,
-    hillside:    validPermits.filter(p => p.is_hillside).length,
+    commercial: validPermits.filter(p => p.is_commercial).length,
+    basement: validPermits.filter(p => p.is_basement).length,
+    hillside: validPermits.filter(p => p.is_hillside).length,
   }), [validPermits]);
 
   useEffect(() => {
@@ -94,17 +83,18 @@ export default function ContractorMapView({ permits }: ContractorMapViewProps) {
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [p.longitude!, p.latitude!] },
             properties: {
-              address:          p.address ?? 'Unknown',
-              permit_number:    p.permit_number ?? '',
-              permit_type:      p.permit_type ?? 'Unknown',
-              valuation:        p.valuation,
-              issue_date:       p.issue_date ?? '',
+              address: p.address ?? 'Unknown',
+              permit_number: p.permit_number ?? '',
+              permit_type: p.permit_type ?? 'Unknown',
+              valuation: p.valuation,
+              issue_date: p.issue_date ?? '',
               work_description: p.work_description ?? '',
-              is_residential:   p.is_residential,
-              is_commercial:    p.is_commercial,
-              is_basement:      p.is_basement,
-              is_hillside:      p.is_hillside,
-              color:            getPinColor(p),
+              is_residential: p.is_residential,
+              is_commercial: p.is_commercial,
+              is_basement: p.is_basement,
+              is_hillside: p.is_hillside,
+              permit_link: p.permit_link ?? '',
+              color: getPinColor(p),
             },
           })),
         };
@@ -171,14 +161,16 @@ export default function ContractorMapView({ permits }: ContractorMapViewProps) {
 
         // Popup on individual pin click
         map.on('click', 'pins', (e: any) => {
-          const props  = e.features[0].properties;
+          const props = e.features[0].properties;
           const coords = e.features[0].geometry.coordinates.slice();
           const badges = [
-            props.is_commercial  ? { label: 'Commercial',  bg: '#dbeafe', color: '#1d4ed8' } : null,
+            props.is_commercial ? { label: 'Commercial', bg: '#dbeafe', color: '#1d4ed8' } : null,
             props.is_residential ? { label: 'Residential', bg: '#d1fae5', color: '#065f46' } : null,
-            props.is_basement    ? { label: 'Basement',    bg: '#fef3c7', color: '#92400e' } : null,
-            props.is_hillside    ? { label: 'Hillside',    bg: '#ffe4e6', color: '#9f1239' } : null,
+            props.is_basement ? { label: 'Basement', bg: '#fef3c7', color: '#92400e' } : null,
+            props.is_hillside ? { label: 'Hillside', bg: '#ffe4e6', color: '#9f1239' } : null,
           ].filter(Boolean) as { label: string; bg: string; color: string }[];
+
+          const link = getLADBSLink(props.permit_number, props.permit_link);
 
           new mapboxgl.Popup({ offset: 14, closeButton: true, maxWidth: '320px' })
             .setLngLat(coords)
@@ -192,7 +184,8 @@ export default function ContractorMapView({ permits }: ContractorMapViewProps) {
                   <p style="font-size:11px;color:#475569;margin:0 0 3px"><span style="font-weight:800;color:#1e293b">Permit:</span> #${props.permit_number} &nbsp;·&nbsp; ${props.permit_type}</p>
                   <p style="font-size:11px;color:#475569;margin:0"><span style="font-weight:800;color:#1e293b">Date:</span> ${props.issue_date} &nbsp;·&nbsp; <span style="font-weight:900;color:#059669">${formatVal(props.valuation)}</span></p>
                 </div>
-                ${props.work_description ? `<p style="font-size:10px;color:#94a3b8;line-height:1.5;margin:0">${props.work_description.slice(0, 130)}${props.work_description.length > 130 ? '…' : ''}</p>` : ''}
+                ${props.work_description ? `<p style="font-size:10px;color:#94a3b8;line-height:1.5;margin:0 0 8px">${props.work_description.slice(0, 130)}${props.work_description.length > 130 ? '…' : ''}</p>` : ''}
+                ${link ? `<a href="${link}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;color:#059669;text-decoration:none;padding:4px 8px;background:#ecfdf5;border-radius:6px;border:1px solid #a7f3d0">View Details ↗</a>` : ''}
               </div>
             `)
             .addTo(map);
@@ -208,21 +201,39 @@ export default function ContractorMapView({ permits }: ContractorMapViewProps) {
           });
         });
 
-        map.on('mouseenter', 'pins',     () => { map.getCanvas().style.cursor = 'pointer'; });
-        map.on('mouseleave', 'pins',     () => { map.getCanvas().style.cursor = ''; });
+        map.on('mouseenter', 'pins', () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'pins', () => { map.getCanvas().style.cursor = ''; });
         map.on('mouseenter', 'clusters', () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', 'clusters', () => { map.getCanvas().style.cursor = ''; });
+
+        // Viewport change handler
+        const updateViewport = () => {
+          if (!onViewportChange) return;
+          const bounds = map.getBounds();
+          const ne = bounds.getNorthEast();
+          const sw = bounds.getSouthWest();
+          const visible = permits.filter(p =>
+            p.longitude != null && p.latitude != null &&
+            p.longitude >= sw.lng && p.longitude <= ne.lng &&
+            p.latitude >= sw.lat && p.latitude <= ne.lat
+          );
+          onViewportChange(visible);
+        };
+
+        map.on('moveend', updateViewport);
 
         // Fit bounds
         if (validPermits.length > 1) {
           const lngs = validPermits.map(p => p.longitude!);
-          const lats  = validPermits.map(p => p.latitude!);
+          const lats = validPermits.map(p => p.latitude!);
           map.fitBounds(
             [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
             { padding: 60, maxZoom: 14, duration: 1000 }
           );
         } else if (validPermits.length === 1) {
           map.flyTo({ center: [validPermits[0].longitude!, validPermits[0].latitude!], zoom: 14 });
+        } else {
+          updateViewport();
         }
 
         setReady(true);
@@ -234,7 +245,7 @@ export default function ContractorMapView({ permits }: ContractorMapViewProps) {
       cancelled = true;
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
     };
-  }, [validPermits]);
+  }, [validPermits, onViewportChange, permits]);
 
   if (validPermits.length === 0) {
     return (
@@ -246,7 +257,7 @@ export default function ContractorMapView({ permits }: ContractorMapViewProps) {
         <div className="bg-slate-50 border border-slate-200 rounded-2xl h-[360px] flex flex-col items-center justify-center gap-3">
           <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
             </svg>
           </div>
           <p className="text-slate-500 text-sm font-bold">No map locations available</p>
@@ -273,9 +284,9 @@ export default function ContractorMapView({ permits }: ContractorMapViewProps) {
       <div className="flex gap-2 mb-3 flex-wrap">
         {[
           { label: 'Residential', count: stats.residential, color: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
-          { label: 'Commercial',  count: stats.commercial,  color: 'bg-blue-500',    text: 'text-blue-700',    bg: 'bg-blue-50 border-blue-200' },
-          { label: 'Basement',    count: stats.basement,    color: 'bg-amber-500',   text: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200' },
-          { label: 'Hillside',    count: stats.hillside,    color: 'bg-rose-500',    text: 'text-rose-700',    bg: 'bg-rose-50 border-rose-200' },
+          { label: 'Commercial', count: stats.commercial, color: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+          { label: 'Basement', count: stats.basement, color: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
+          { label: 'Hillside', count: stats.hillside, color: 'bg-rose-500', text: 'text-rose-700', bg: 'bg-rose-50 border-rose-200' },
         ].map(s => (
           <div key={s.label} className={`border rounded-xl px-2.5 py-1.5 flex items-center gap-1.5 ${s.bg}`}>
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.color}`} />

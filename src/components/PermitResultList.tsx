@@ -44,14 +44,23 @@ function getProjectLabels(permit: Permit): string[] {
   if (permit.is_commercial) labels.push('Commercial');
   if (permit.is_basement) labels.push('Basement');
   if (permit.is_hillside) labels.push('Hillside');
+  
   const type = permit.permit_type?.toLowerCase() ?? '';
-  if (type.includes('new')) labels.push('New Build');
+  const pType = permit.project_type?.toLowerCase() ?? '';
+  const desc = permit.work_description?.toLowerCase() ?? '';
+
+  if (type.includes('new') || type.includes('addition')) labels.push('New Build');
   if (type.includes('alter') || type.includes('renovation')) labels.push('Alteration');
-  if (type.includes('adu')) labels.push('ADU');
-  if (type.includes('addition')) labels.push('Addition');
+  if (type.includes('adu') || desc.includes('adu') || desc.includes('jadu')) labels.push('ADU');
+  
+  const isNonBldg = type.includes('nonbldg') || type.includes('non-bldg') || type.includes('non building') ||
+                    pType.includes('nonbldg') || pType.includes('non-bldg') || pType.includes('non building');
+  if (isNonBldg) labels.push('NonBldg');
+
   if (type.includes('grading') || type.includes('retaining')) labels.push('Grading');
+
   if (labels.length === 0 && permit.permit_type) labels.push(permit.permit_type);
-  return labels;
+  return Array.from(new Set(labels));
 }
 
 const LABEL_COLORS: Record<string, string> = {
@@ -64,18 +73,23 @@ const LABEL_COLORS: Record<string, string> = {
   ADU: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   Addition: 'bg-blue-50 text-blue-700 border-blue-200',
   Grading: 'bg-orange-50 text-orange-700 border-orange-200',
+  NonBldg: 'bg-rose-50 text-rose-700 border-rose-200',
 };
 
 function filterPermit(permit: Permit, filter: string): boolean {
+  const type = permit.permit_type?.toLowerCase() ?? '';
+  const pType = permit.project_type?.toLowerCase() ?? '';
+  const desc = permit.work_description?.toLowerCase() ?? '';
+
   if (filter === 'all') return true;
   if (filter === 'residential') return !!permit.is_residential;
   if (filter === 'commercial') return !!permit.is_commercial;
   if (filter === 'basement') return !!permit.is_basement;
   if (filter === 'hillside') return !!permit.is_hillside;
-  if (filter === 'new_build') return !!(permit.permit_type?.toLowerCase().includes('new') || permit.permit_type?.toLowerCase().includes('addition'));
-  if (filter === 'alteration') return !!(permit.permit_type?.toLowerCase().includes('alter') || permit.permit_type?.toLowerCase().includes('renovation'));
-  if (filter === 'nonbldg') return !!(permit.permit_type?.toLowerCase().includes('nonbldg') || permit.permit_type?.toLowerCase().includes('non-bldg') || permit.project_type?.toLowerCase().includes('nonbldg') || permit.project_type?.toLowerCase().includes('non-bldg') || permit.project_type?.toLowerCase().includes('non building') || permit.permit_type?.toLowerCase().includes('non building'));
-  if (filter === 'adu') return !!(permit.permit_type?.toLowerCase().includes('adu') || permit.work_description?.toLowerCase().includes('adu'));
+  if (filter === 'new_build') return !!(type.includes('new') || type.includes('addition'));
+  if (filter === 'alteration') return !!(type.includes('alter') || type.includes('renovation'));
+  if (filter === 'nonbldg') return !!(type.includes('nonbldg') || type.includes('non-bldg') || type.includes('non building') || pType.includes('nonbldg') || pType.includes('non-bldg') || pType.includes('non building'));
+  if (filter === 'adu') return !!(type.includes('adu') || desc.includes('adu') || desc.includes('jadu'));
   return true;
 }
 
