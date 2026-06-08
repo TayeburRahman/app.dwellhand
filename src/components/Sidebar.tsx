@@ -3,15 +3,16 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { 
-  LayoutDashboard, 
-  Map as MapIcon, 
-  Settings, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  Map as MapIcon,
+  Settings,
+  LogOut,
   ChevronLeft,
   ChevronRight,
   Home,
-  FileSearch
+  FileSearch,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -32,6 +33,7 @@ export function Sidebar() {
   const navItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Map', href: '/map', icon: MapIcon },
+    { name: 'Builder Intelligence', href: '/dashboard/builder-intelligence', icon: Building2 },
     { name: 'License Search', href: '/contractors', icon: FileSearch },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
