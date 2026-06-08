@@ -88,6 +88,7 @@ export default function ContractorSearchClient() {
   const [loadingRole, setLoadingRole] = useState(true);
 
   const [licenseInput, setLicenseInput] = useState('');
+  const hasInitialSearched = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,10 +133,13 @@ export default function ContractorSearchClient() {
   const isCommercial = role === 'paid' || role === 'commercial' || role === 'enterprise';
 
   // ── Search handler ──
-  const handleSearch = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    const license = licenseInput.trim();
-    if (!license) return;
+  const performSearch = useCallback(async (license: string) => {
+    // Strip any class suffixes like "-B" or "-C39" (e.g. 1001034-B -> 1001034)
+    const cleanLicense = license.split('-')[0].trim();
+    if (!cleanLicense) return;
+
+    // Update input to reflect the cleaned license if it differs
+    setLicenseInput(cleanLicense);
 
     setIsLoading(true);
     setError(null);
@@ -147,8 +151,8 @@ export default function ContractorSearchClient() {
 
     try {
       const [profileRes, permitsRes] = await Promise.all([
-        fetch(`/api/contractors/profile?license=${encodeURIComponent(license)}`),
-        fetch(`/api/contractors/permits?license=${encodeURIComponent(license)}`),
+        fetch(`/api/contractors/profile?license=${encodeURIComponent(cleanLicense)}`),
+        fetch(`/api/contractors/permits?license=${encodeURIComponent(cleanLicense)}`),
       ]);
 
       if (!profileRes.ok || !permitsRes.ok) {
@@ -169,7 +173,25 @@ export default function ContractorSearchClient() {
       setIsLoading(false);
       setSearched(true);
     }
-  }, [licenseInput]);
+  }, []);
+
+  const handleSearch = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    performSearch(licenseInput.trim());
+  }, [licenseInput, performSearch]);
+
+  // ── Initial search from URL parameter ──
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !hasInitialSearched.current) {
+      const params = new URLSearchParams(window.location.search);
+      const initialLicense = params.get('license');
+      if (initialLicense) {
+        hasInitialSearched.current = true;
+        setLicenseInput(initialLicense);
+        performSearch(initialLicense);
+      }
+    }
+  }, [performSearch]);
 
   // ── Loading role shell ──
   if (loadingRole) {
