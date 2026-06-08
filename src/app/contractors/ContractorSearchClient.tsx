@@ -18,7 +18,7 @@ const ContractorMapView = dynamic(() => import('@/components/ContractorMapView')
   ),
 });
 
-// ─── Skeleton loaders ────────────────────────────────────────────────────────
+// ─── Skeleton loaders ──────────────────────── 
 function CardSkeleton() {
   return (
     <div className="bg-white/80 border border-white/60 rounded-2xl overflow-hidden shadow-xl animate-pulse">
@@ -58,7 +58,7 @@ function ListSkeleton() {
   );
 }
 
-// ─── Upgrade wall for non-commercial users ────────────────────────────────────
+// ─── Upgrade wall for non-commercial users ──────────────────── 
 function UpgradePrompt() {
   return (
     <div className="max-w-2xl mx-auto px-6 py-20 text-center">
