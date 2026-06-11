@@ -13,7 +13,10 @@ CREATE OR REPLACE FUNCTION get_builder_intelligence(
   p_sub_filter     TEXT  DEFAULT '',
   p_sort_by        TEXT  DEFAULT 'count',
   p_result_limit   INT   DEFAULT 100,
-  p_offset         INT   DEFAULT 0
+  p_offset         INT   DEFAULT 0,
+  p_keyword        TEXT  DEFAULT '',
+  p_city           TEXT  DEFAULT '',
+  p_county         TEXT  DEFAULT ''
 )
 RETURNS TABLE (
   contractor_license  TEXT,
@@ -39,6 +42,9 @@ AS $$
     AND (p_property_type != 'commercial'  OR p.is_commercial  = true)
     AND (p_sub_filter    != 'basement'    OR p.is_basement    = true)
     AND (p_sub_filter    != 'hillside'    OR p.is_hillside    = true)
+    AND (p_keyword       = ''             OR p.work_description ILIKE '%' || p_keyword || '%')
+    AND (p_city          = ''             OR p.city ILIKE '%' || p_city || '%')
+    AND (p_county        = ''             OR p.source_county ILIKE '%' || p_county || '%')
     AND (
          (p_category = 'new_build'  AND (lower(p.permit_type) LIKE '%new%'   OR lower(p.project_category) LIKE '%new%'))
       OR (p_category = 'alteration' AND (lower(p.permit_type) LIKE '%alter%' OR lower(p.permit_type) LIKE '%addition%' OR lower(p.permit_type) LIKE '%repair%'))
@@ -62,7 +68,10 @@ $$;
 CREATE OR REPLACE FUNCTION get_builder_intelligence_count(
   p_category       TEXT,
   p_property_type  TEXT  DEFAULT 'all',
-  p_sub_filter     TEXT  DEFAULT ''
+  p_sub_filter     TEXT  DEFAULT '',
+  p_keyword        TEXT  DEFAULT '',
+  p_city           TEXT  DEFAULT '',
+  p_county         TEXT  DEFAULT ''
 )
 RETURNS BIGINT
 LANGUAGE sql
@@ -77,6 +86,9 @@ AS $$
     AND (p_property_type != 'commercial'  OR p.is_commercial  = true)
     AND (p_sub_filter    != 'basement'    OR p.is_basement    = true)
     AND (p_sub_filter    != 'hillside'    OR p.is_hillside    = true)
+    AND (p_keyword       = ''             OR p.work_description ILIKE '%' || p_keyword || '%')
+    AND (p_city          = ''             OR p.city ILIKE '%' || p_city || '%')
+    AND (p_county        = ''             OR p.source_county ILIKE '%' || p_county || '%')
     AND (
          (p_category = 'new_build'  AND (lower(p.permit_type) LIKE '%new%'   OR lower(p.project_category) LIKE '%new%'))
       OR (p_category = 'alteration' AND (lower(p.permit_type) LIKE '%alter%' OR lower(p.permit_type) LIKE '%addition%' OR lower(p.permit_type) LIKE '%repair%'))
@@ -94,7 +106,10 @@ CREATE OR REPLACE FUNCTION get_builders_by_classification(
   p_property_type  TEXT  DEFAULT 'all',
   p_sort_by        TEXT  DEFAULT 'count',
   p_result_limit   INT   DEFAULT 100,
-  p_offset         INT   DEFAULT 0
+  p_offset         INT   DEFAULT 0,
+  p_keyword        TEXT  DEFAULT '',
+  p_city           TEXT  DEFAULT '',
+  p_county         TEXT  DEFAULT ''
 )
 RETURNS TABLE (
   contractor_license  TEXT,
@@ -125,6 +140,9 @@ AS $$
   WHERE
     bit.contractor_license IS NOT NULL
     AND (p_license_class = '' OR bit.cslb_classification ILIKE '%' || p_license_class || '%')
+    AND (p_keyword = '' OR p.work_description ILIKE '%' || p_keyword || '%')
+    AND (p_city = '' OR p.city ILIKE '%' || p_city || '%')
+    AND (p_county = '' OR p.source_county ILIKE '%' || p_county || '%')
   GROUP BY
     bit.contractor_license,
     bit.cslb_company_name,
@@ -142,23 +160,32 @@ $$;
 
 -- ──────────────────────────────────────────────────────────────
 -- Function 4: Total count for classification-based categories
--- Fast — reads only the small builder_intelligence_test table.
 -- ──────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION get_builders_by_classification_count(
-  p_license_class TEXT
+  p_license_class  TEXT,
+  p_property_type  TEXT  DEFAULT 'all',
+  p_keyword        TEXT  DEFAULT '',
+  p_city           TEXT  DEFAULT '',
+  p_county         TEXT  DEFAULT ''
 )
 RETURNS BIGINT
 LANGUAGE sql
 STABLE
 SET search_path = public
 AS $$
-  SELECT COUNT(*)
-  FROM public.builder_intelligence_test
+  SELECT COUNT(DISTINCT bit.contractor_license)
+  FROM public.builder_intelligence_test bit
+  LEFT JOIN public.ca_permits p
+    ON  p.contractor_license::TEXT = bit.contractor_license::TEXT
+    AND (p_property_type != 'residential' OR p.is_residential = true)
+    AND (p_property_type != 'commercial'  OR p.is_commercial  = true)
   WHERE
-    contractor_license IS NOT NULL
-    AND (p_license_class = '' OR cslb_classification ILIKE '%' || p_license_class || '%');
+    bit.contractor_license IS NOT NULL
+    AND (p_license_class = '' OR bit.cslb_classification ILIKE '%' || p_license_class || '%')
+    AND (p_keyword = '' OR p.work_description ILIKE '%' || p_keyword || '%')
+    AND (p_city = '' OR p.city ILIKE '%' || p_city || '%')
+    AND (p_county = '' OR p.source_county ILIKE '%' || p_county || '%');
 $$;
-
 
 -- ──────────────────────────────────────────────────────────────
 -- Optional: trigram index to speed up LIKE '%new%' etc.
@@ -169,3 +196,5 @@ $$;
 --   ON public.ca_permits USING gin (permit_type gin_trgm_ops);
 -- CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ca_permits_project_category_trgm
 --   ON public.ca_permits USING gin (project_category gin_trgm_ops);
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ca_permits_work_desc_trgm
+--   ON public.ca_permits USING gin (work_description gin_trgm_ops);

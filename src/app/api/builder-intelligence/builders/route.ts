@@ -26,6 +26,9 @@ async function handlePermitBased(
   subFilter: string,
   sortBy: SortBy,
   page: number,
+  keyword: string,
+  city: string,
+  county: string,
 ) {
   const offset = (page - 1) * PAGE_SIZE;
 
@@ -38,11 +41,17 @@ async function handlePermitBased(
       p_sort_by:       sortBy,
       p_result_limit:  PAGE_SIZE,
       p_offset:        offset,
+      p_keyword:       keyword,
+      p_city:          city,
+      p_county:        county,
     }),
     supabase.rpc('get_builder_intelligence_count', {
       p_category:      category,
       p_property_type: propertyType,
       p_sub_filter:    subFilter,
+      p_keyword:       keyword,
+      p_city:          city,
+      p_county:        county,
     }),
   ]);
 
@@ -96,6 +105,9 @@ async function handleClassificationBased(
   propertyType: string,
   sortBy: SortBy,
   page: number,
+  keyword: string,
+  city: string,
+  county: string,
 ) {
   const offset = (page - 1) * PAGE_SIZE;
 
@@ -106,9 +118,16 @@ async function handleClassificationBased(
       p_sort_by:       sortBy,
       p_result_limit:  PAGE_SIZE,
       p_offset:        offset,
+      p_keyword:       keyword,
+      p_city:          city,
+      p_county:        county,
     }),
     supabase.rpc('get_builders_by_classification_count', {
       p_license_class: licenseClass,
+      p_property_type: propertyType,
+      p_keyword:       keyword,
+      p_city:          city,
+      p_county:        county,
     }),
   ]);
 
@@ -145,12 +164,15 @@ export async function GET(request: NextRequest) {
   const licenseClass = searchParams.get('license_class') ?? '';
   const sortBy       = (searchParams.get('sort') ?? 'count') as SortBy;
   const page         = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
+  const keyword      = searchParams.get('keyword')       ?? '';
+  const city         = searchParams.get('city')          ?? '';
+  const county       = searchParams.get('county')        ?? '';
 
   const supabase = await createClient();
 
   if (category === 'meps' || category === 'trades') {
-    return handleClassificationBased(supabase, licenseClass, propertyType, sortBy, page);
+    return handleClassificationBased(supabase, licenseClass, propertyType, sortBy, page, keyword, city, county);
   }
 
-  return handlePermitBased(supabase, category, propertyType, subFilter, sortBy, page);
+  return handlePermitBased(supabase, category, propertyType, subFilter, sortBy, page, keyword, city, county);
 }

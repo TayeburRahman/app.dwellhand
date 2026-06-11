@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/estree": "^1.0.9",
     "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^20",
     "@types/react": "^19",
