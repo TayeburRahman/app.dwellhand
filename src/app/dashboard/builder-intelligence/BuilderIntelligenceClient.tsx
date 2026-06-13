@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   Building2, TrendingUp, Hash, Search, ChevronDown,
@@ -74,6 +74,126 @@ function statusDot(status: string | null) {
   return 'bg-slate-400';
 }
 
+// ─── Autocomplete Input ───────────────────────────────────────────────────────
+
+const autocompleteCache: Record<string, string[]> = {};
+
+function AutocompleteInput({
+  type,
+  placeholder,
+  value,
+  onChange,
+  onSearch,
+  icon: Icon
+}: {
+  type: 'city' | 'county';
+  placeholder: string;
+  value: string;
+  onChange: (val: string) => void;
+  onSearch: () => void;
+  icon: any;
+}) {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch suggestions
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        setSuggestions([]);
+        return;
+      }
+
+      const cacheKey = `${type}:${trimmed.toLowerCase()}`;
+      if (autocompleteCache[cacheKey]) {
+        setSuggestions(autocompleteCache[cacheKey]);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const res = await fetch(`/api/locations/suggestions?type=${type}&q=${encodeURIComponent(trimmed)}`);
+        if (res.ok) {
+          const data = await res.json();
+          autocompleteCache[cacheKey] = data.suggestions || [];
+          setSuggestions(autocompleteCache[cacheKey]);
+        }
+      } catch (err) {
+        // ignore errors for autocomplete
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const timeoutId = setTimeout(fetchSuggestions, 150);
+    return () => clearTimeout(timeoutId);
+  }, [value, type]);
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        onChange={e => {
+          onChange(e.target.value);
+          setShowDropdown(true);
+        }}
+        onFocus={() => {
+          if (value.trim()) setShowDropdown(true);
+        }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            setShowDropdown(false);
+            onSearch();
+          }
+        }}
+        className="w-full pl-9 pr-4 py-2 text-sm font-semibold border border-slate-200 rounded-xl outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all placeholder:text-slate-400"
+      />
+      
+      {showDropdown && (suggestions.length > 0 || isLoading) && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
+          {isLoading ? (
+            <div className="p-3 text-xs text-slate-400 text-center flex items-center justify-center gap-2">
+              <Loader2 className="w-3 h-3 animate-spin" />
+            </div>
+          ) : (
+            <ul className="py-1">
+              {suggestions.map((suggestion, i) => (
+                <li
+                  key={i}
+                  className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 cursor-pointer transition-colors"
+                  onClick={() => {
+                    onChange(suggestion);
+                    setShowDropdown(false);
+                  }}
+                >
+                  {suggestion}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function BuilderSkeleton() {
@@ -144,6 +264,8 @@ function BuilderCard({ builder }: { builder: Builder }) {
               </div>
               <a
                 href={`/contractors?license=${builder.contractor_license}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-[10px] font-black text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-2 rounded-xl transition-colors shadow-sm shadow-indigo-200 whitespace-nowrap"
               >
                 View Profile <ArrowUpRight className="w-3 h-3" />
@@ -262,9 +384,9 @@ export default function BuilderIntelligenceClient() {
     if (subFilter !== 'all') params.set('filter', subFilter);
     if (category === 'meps') params.set('license_class', licenseClass);
     if (category === 'trades') params.set('license_class', tradeCode);
-    if (keyword) params.set('keyword', keyword);
-    if (city) params.set('city', city);
-    if (county) params.set('county', county);
+    if (keyword.trim()) params.set('keyword', keyword.trim());
+    if (city.trim()) params.set('city', city.trim());
+    if (county.trim()) params.set('county', county.trim());
 
     try {
       const res = await fetch(`/api/builder-intelligence/builders?${params}`);
@@ -454,28 +576,22 @@ export default function BuilderIntelligenceClient() {
                       className="w-full pl-9 pr-4 py-2 text-sm font-semibold border border-slate-200 rounded-xl outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all placeholder:text-slate-400"
                     />
                   </div>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="City (e.g. Los Angeles)"
-                      value={city}
-                      onChange={e => setCity(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleSearch(1)}
-                      className="w-full pl-9 pr-4 py-2 text-sm font-semibold border border-slate-200 rounded-xl outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all placeholder:text-slate-400"
-                    />
-                  </div>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="County (e.g. Los Angeles)"
-                      value={county}
-                      onChange={e => setCounty(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleSearch(1)}
-                      className="w-full pl-9 pr-4 py-2 text-sm font-semibold border border-slate-200 rounded-xl outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all placeholder:text-slate-400"
-                    />
-                  </div>
+                  <AutocompleteInput
+                    type="city"
+                    placeholder="City (e.g. Los Angeles)"
+                    value={city}
+                    onChange={setCity}
+                    onSearch={() => handleSearch(1)}
+                    icon={MapPin}
+                  />
+                  <AutocompleteInput
+                    type="county"
+                    placeholder="County (e.g. Los Angeles)"
+                    value={county}
+                    onChange={setCounty}
+                    onSearch={() => handleSearch(1)}
+                    icon={MapPin}
+                  />
                 </div>
               </div>
 
