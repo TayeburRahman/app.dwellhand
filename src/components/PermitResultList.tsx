@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ExternalLink, MapPin } from 'lucide-react';
 import { getLADBSLink } from '@/lib/utils';
 
@@ -95,16 +95,32 @@ function filterPermit(permit: Permit, filter: string): boolean {
 
 interface PermitResultListProps {
   permits: Permit[];
+  highlightAddress?: string | null;
 }
 
-export default function PermitResultList({ permits }: PermitResultListProps) {
+export default function PermitResultList({ permits, highlightAddress }: PermitResultListProps) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [visibleCount, setVisibleCount] = useState(30);
+  const highlightRef = useRef<HTMLDivElement>(null);
 
-  const filtered = useMemo(
-    () => permits.filter(p => filterPermit(p, activeFilter)),
-    [permits, activeFilter]
-  );
+  // Auto-scroll to highlighted permit after render
+  useEffect(() => {
+    if (highlightAddress && highlightRef.current) {
+      setTimeout(() => {
+        highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 600);
+    }
+  }, [highlightAddress, permits]);
+
+  const filtered = useMemo(() => {
+    const base = permits.filter(p => filterPermit(p, activeFilter));
+    if (!highlightAddress) return base;
+    // Sort matching address to top
+    return [
+      ...base.filter(p => p.address?.toUpperCase() === highlightAddress.toUpperCase()),
+      ...base.filter(p => p.address?.toUpperCase() !== highlightAddress.toUpperCase()),
+    ];
+  }, [permits, activeFilter, highlightAddress]);
 
   const visible = filtered.slice(0, visibleCount);
 
@@ -153,11 +169,23 @@ export default function PermitResultList({ permits }: PermitResultListProps) {
         ) : (
           visible.map((permit, idx) => {
             const labels = getProjectLabels(permit);
+            const isHighlighted = !!(highlightAddress && permit.address?.toUpperCase() === highlightAddress.toUpperCase());
             return (
               <div
                 key={permit.permit_number ?? idx}
-                className="bg-white/80 backdrop-blur-sm border border-emerald-100 rounded-2xl p-5 hover:border-emerald-300 hover:shadow-md transition-all flex flex-col gap-4 group"
+                ref={isHighlighted ? highlightRef : undefined}
+                className={`bg-white/80 backdrop-blur-sm border rounded-2xl p-5 hover:shadow-md transition-all flex flex-col gap-4 group ${
+                  isHighlighted
+                    ? 'border-amber-400 shadow-lg shadow-amber-100 ring-2 ring-amber-300 ring-offset-2'
+                    : 'border-emerald-100 hover:border-emerald-300'
+                }`}
               >
+                {isHighlighted && (
+                  <div className="flex items-center gap-2 text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 w-fit">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    From Builder Intelligence
+                  </div>
+                )}
                 {/* Top Row: Address, Permit Type, Link */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                 <div className="flex flex-col gap-1.5">

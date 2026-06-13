@@ -30,27 +30,50 @@ const CATEGORIES: { key: Category; label: string; icon: string }[] = [
   { key: 'new_build', label: 'New Build', icon: '🏗️' },
   { key: 'alteration', label: 'Alteration / Addition / Repair', icon: '🔧' },
   { key: 'adu', label: 'ADU', icon: '🏡' },
+  // MEPs = exactly C10 (Electrical), C20 (HVAC), C36 (Plumbing) per CSLB classification
   { key: 'meps', label: 'MEPs', icon: '⚡' },
   { key: 'trades', label: 'Trades', icon: '🛠️' },
 ];
 
+// MEPs are strictly C10, C20, and C36 per CSLB classification.
+// A contractor holding B + C10 will appear in both New Build and MEPs.
 const MEP_CLASSES = [
   { code: 'C10', label: 'C10 – Electrical' },
   { code: 'C20', label: 'C20 – HVAC' },
   { code: 'C36', label: 'C36 – Plumbing' },
-  { code: 'C42', label: 'C42 – Sanitation' },
 ];
 
+// C-class specialty trades + D-class specialty contractors (CSLB)
+// Note: contractor_license in CA_PERMITS stores the full license+class suffix
+// e.g. "1001034-C39", "1001034-D49"
 const TRADE_OPTIONS = [
-  { code: 'C39', label: 'Roofing – C39' },
-  { code: 'C53', label: 'Pool – C53' },
-  { code: 'C21', label: 'Demo – C21' },
-  { code: 'C12', label: 'Grading – C12' },
+  // ── C-class specialty ──
   { code: 'C8',  label: 'Foundation – C8' },
   { code: 'C11', label: 'Elevator – C11' },
+  { code: 'C12', label: 'Grading – C12' },
+  { code: 'C21', label: 'Demo – C21' },
   { code: 'C27', label: 'Landscaping – C27' },
+  { code: 'C39', label: 'Roofing – C39' },
+  { code: 'C42', label: 'Sanitation – C42' },
   { code: 'C46', label: 'Solar – C46' },
-  { code: 'C49', label: 'Tree & Palm – C49' },
+  { code: 'C53', label: 'Pool – C53' },
+  // ── D-class specialty (CSLB) ──
+  { code: 'D06', label: 'Concrete Related – D06' },
+  { code: 'D09', label: 'Drilling & Blasting – D09' },
+  { code: 'D13', label: 'Fire Protection – D13' },
+  { code: 'D21', label: 'Machinery & Pumps – D21' },
+  { code: 'D28', label: 'Doors & Gates – D28' },
+  { code: 'D29', label: 'Paperhanging – D29' },
+  { code: 'D32', label: 'Parking & Highway – D32' },
+  { code: 'D34', label: 'Prefab Equipment – D34' },
+  { code: 'D35', label: 'Reinforcing Steel – D35' },
+  { code: 'D37', label: 'Refrigeration – D37' },
+  { code: 'D38', label: 'Sand & Water Blasting – D38' },
+  { code: 'D41', label: 'Siding & Decking – D41' },
+  { code: 'D43', label: 'Boiler & Steam – D43' },
+  { code: 'D44', label: 'Tile (Ceramic) – D44' },
+  { code: 'D49', label: 'Tree Service – D49' },
+  { code: 'D50', label: 'Reinforced Concrete – D50' },
 ];
 
 const STATUS_DOT: Record<string, string> = {
@@ -263,7 +286,7 @@ function BuilderCard({ builder }: { builder: Builder }) {
                 <p className="text-lg font-black text-emerald-600">{fmtVal(builder.total_valuation)}</p>
               </div>
               <a
-                href={`/contractors?license=${builder.contractor_license}`}
+                href={`/contractors?license=${encodeURIComponent(builder.contractor_license)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-[10px] font-black text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-2 rounded-xl transition-colors shadow-sm shadow-indigo-200 whitespace-nowrap"
@@ -287,9 +310,18 @@ function BuilderCard({ builder }: { builder: Builder }) {
               {expanded && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {builder.addresses.map((addr, i) => (
-                    <span key={i} className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                    <a
+                      key={i}
+                      href={`/contractors?license=${encodeURIComponent(builder.contractor_license)}&address=${encodeURIComponent(addr)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`View full permit details for ${addr}`}
+                      className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg hover:bg-indigo-100 hover:border-indigo-400 hover:shadow-sm transition-all cursor-pointer group/addr"
+                    >
+                      <MapPin className="w-2.5 h-2.5 text-indigo-400 group-hover/addr:text-indigo-600 flex-shrink-0" />
                       {addr}
-                    </span>
+                      <ArrowUpRight className="w-2.5 h-2.5 text-indigo-300 group-hover/addr:text-indigo-600 flex-shrink-0" />
+                    </a>
                   ))}
                 </div>
               )}
@@ -521,7 +553,15 @@ export default function BuilderIntelligenceClient() {
               {/* MEPs class filter */}
               {category === 'meps' && (
                 <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">License Class</p>
+                  <div className="flex items-center gap-3 mb-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">License Class</p>
+                    <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
+                      C10 · C20 · C36 only
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-semibold mb-3">
+                    Builders holding a B license <em>and</em> a MEP class (e.g. B+C10) will appear in both New Build and MEPs.
+                  </p>
                   <div className="flex gap-2 flex-wrap">
                     {MEP_CLASSES.map(c => (
                       <button
@@ -543,8 +583,15 @@ export default function BuilderIntelligenceClient() {
               {/* Trades dropdown */}
               {category === 'trades' && (
                 <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                    Select Trade — For Owner-Builders
+                  <div className="flex items-center gap-3 mb-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Trade</p>
+                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                      C-class &amp; D-class specialty
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-semibold mb-3">
+                    Filtered by the trade suffix in <code className="bg-slate-100 px-1 rounded">contractor_license</code> (e.g. 1001034-D49).
+                    A builder with B+D49 appears in both New Build and this trade.
                   </p>
                   <div className="relative max-w-xs">
                     <select
@@ -552,9 +599,16 @@ export default function BuilderIntelligenceClient() {
                       onChange={e => setTradeCode(e.target.value)}
                       className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 bg-white appearance-none outline-none focus:ring-2 focus:ring-indigo-500 pr-10"
                     >
-                      {TRADE_OPTIONS.map(o => (
-                        <option key={o.code} value={o.code}>{o.label}</option>
-                      ))}
+                      <optgroup label="C-class Specialty">
+                        {TRADE_OPTIONS.filter(o => o.code.startsWith('C')).map(o => (
+                          <option key={o.code} value={o.code}>{o.label}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="D-class Specialty">
+                        {TRADE_OPTIONS.filter(o => o.code.startsWith('D')).map(o => (
+                          <option key={o.code} value={o.code}>{o.label}</option>
+                        ))}
+                      </optgroup>
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   </div>

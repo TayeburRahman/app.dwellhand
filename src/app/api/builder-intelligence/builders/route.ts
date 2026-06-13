@@ -13,12 +13,6 @@ interface RpcPermitRow {
   sample_addresses: string[] | null;
 }
 
-interface RpcClassRow extends RpcPermitRow {
-  business_name: string | null;
-  license_class: string | null;
-  license_status: string | null;
-}
-
 async function handlePermitBased(
   supabase: any,
   category: string,
@@ -109,10 +103,16 @@ async function handleClassificationBased(
   city: string,
   county: string,
 ) {
+  if (!licenseClass) {
+    return NextResponse.json({ builders: [], total_count: 0, total_pages: 0, current_page: page });
+  }
+
   const offset = (page - 1) * PAGE_SIZE;
 
+  // Both grouping, splitting pipe-joined licenses, and aggregation happen
+  // entirely inside PostgreSQL via get_builders_by_class RPC.
   const [dataRes, countRes] = await Promise.all([
-    supabase.rpc('get_builders_by_classification', {
+    supabase.rpc('get_builders_by_class', {
       p_license_class: licenseClass,
       p_property_type: propertyType,
       p_sort_by:       sortBy,
@@ -122,7 +122,7 @@ async function handleClassificationBased(
       p_city:          city,
       p_county:        county,
     }),
-    supabase.rpc('get_builders_by_classification_count', {
+    supabase.rpc('get_builders_by_class_count', {
       p_license_class: licenseClass,
       p_property_type: propertyType,
       p_keyword:       keyword,
@@ -134,19 +134,44 @@ async function handleClassificationBased(
   if (dataRes.error) return NextResponse.json({ error: dataRes.error.message }, { status: 500 });
   if (countRes.error) return NextResponse.json({ error: countRes.error.message }, { status: 500 });
 
-  const rows = (dataRes.data ?? []) as RpcClassRow[];
+  const rows = (dataRes.data ?? []) as Array<{
+    contractor_license: string;
+    contractor_name: string | null;
+    project_count: number;
+    total_valuation: number;
+    sample_addresses: string[] | null;
+  }>;
   const totalCount = Number(countRes.data ?? 0);
 
-  const builders = rows.map((r, i) => ({
-    rank:               offset + i + 1,
-    contractor_license: r.contractor_license,
-    business_name:      r.business_name ?? r.contractor_name ?? 'Unknown Builder',
-    license_status:     r.license_status ?? null,
-    license_class:      r.license_class ?? '',
-    project_count:      r.project_count,
-    total_valuation:    r.total_valuation,
-    addresses:          r.sample_addresses ?? [],
-  }));
+  // Enrich with business names from builder_intelligence_test
+  const baseLicenses = rows.map(r => r.contractor_license);
+  const { data: profiles } = baseLicenses.length
+    ? await supabase
+        .from('builder_intelligence_test')
+        .select('contractor_license, cslb_company_name, cslb_license_status')
+        .in('contractor_license', baseLicenses)
+    : { data: [] };
+
+  const profileMap = new Map<string, { name: string; status: string }>();
+  for (const p of profiles ?? []) {
+    profileMap.set(String(p.contractor_license), {
+      name: p.cslb_company_name ?? '',
+      status: p.cslb_license_status ?? '',
+    });
+  }
+
+  const builders = rows.map((r, i) => {
+    const prof = profileMap.get(r.contractor_license);
+    return {
+      rank:               offset + i + 1,
+      contractor_license: r.contractor_license,
+      business_name:      prof?.name || r.contractor_name || 'Unknown Builder',
+      license_status:     prof?.status ?? null,
+      project_count:      r.project_count,
+      total_valuation:    r.total_valuation,
+      addresses:          r.sample_addresses ?? [],
+    };
+  });
 
   return NextResponse.json({
     builders,

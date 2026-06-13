@@ -92,6 +92,7 @@ export default function ContractorSearchClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [highlightAddress, setHighlightAddress] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<BuilderProfile | null>(null);
   const [profileMissing, setProfileMissing] = useState(false);
@@ -185,6 +186,8 @@ export default function ContractorSearchClient() {
     if (typeof window !== 'undefined' && !hasInitialSearched.current) {
       const params = new URLSearchParams(window.location.search);
       const initialLicense = params.get('license');
+      const initialAddress = params.get('address');
+      if (initialAddress) setHighlightAddress(decodeURIComponent(initialAddress));
       if (initialLicense) {
         hasInitialSearched.current = true;
         setLicenseInput(initialLicense);
@@ -361,7 +364,7 @@ export default function ContractorSearchClient() {
 
                   {/* ── Section 5: Permit / Project Result List ── */}
                   {permits.length > 0 && (
-                    <PermitResultList permits={viewportPermits ?? permits} />
+                    <PermitResultList permits={viewportPermits ?? permits} highlightAddress={highlightAddress} />
                   )}
 
                   {permits.length === 0 && (
