@@ -5,9 +5,10 @@ import useSWR from 'swr';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, Map as MapIcon, ArrowUpRight, BarChart3, Clock, MapPin } from 'lucide-react';
+import { FileText, Map as MapIcon, ArrowUpRight, BarChart3, Clock, MapPin, Search } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
+import { useRouter } from 'next/navigation';
 
 const supabase = createClient();
 
@@ -44,6 +45,9 @@ export default function DashboardPage() {
     revalidateOnFocus: false,
     dedupingInterval: 300000,
   });
+
+  const router = useRouter();
+  const [keyword, setKeyword] = React.useState('');
 
   const user = data?.user;
   const totalPermits = data?.totalPermits || '0';
@@ -147,6 +151,59 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="glass shadow-2xl border-white/60 overflow-hidden relative group">
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <CardContent className="p-6 relative z-10 flex flex-col sm:flex-row items-center gap-6">
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-indigo-950 flex items-center gap-2 mb-1">
+              <Search className="w-5 h-5 text-indigo-500" /> Keyword Intelligence
+            </h2>
+            <p className="text-sm font-semibold text-slate-500">
+              Discover permits by specific materials, brands, or descriptions (e.g., "solar", "pool", "tesla").
+            </p>
+          </div>
+          <div className="w-full sm:w-auto flex-1 max-w-md relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && keyword.trim()) {
+                  router.push(`/contractors?keyword=${encodeURIComponent(keyword.trim())}`);
+                }
+              }}
+              placeholder="Enter a keyword to search all permits..."
+              className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 shadow-sm rounded-2xl outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/20 transition-all font-semibold text-slate-700 placeholder:text-slate-400"
+            />
+            <Button
+              onClick={() => {
+                if (keyword.trim()) router.push(`/contractors?keyword=${encodeURIComponent(keyword.trim())}`);
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm transition-all"
+              size="sm"
+            >
+              Search
+            </Button>
+          </div>
+        </CardContent>
+        <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-3 flex items-center gap-3 overflow-x-auto relative z-10">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Popular:</span>
+          {['Solar', 'Pool', 'Roofing', 'HVAC', 'ADU', 'Kitchen', 'Foundation', 'Tesla'].map(tag => (
+            <button
+              key={tag}
+              onClick={() => {
+                setKeyword(tag);
+                router.push(`/contractors?keyword=${encodeURIComponent(tag)}`);
+              }}
+              className="text-[11px] font-bold text-slate-600 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors whitespace-nowrap"
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="glass shadow-2xl border-white/40 flex flex-col group overflow-hidden min-h-[300px]">

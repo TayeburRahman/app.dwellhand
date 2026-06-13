@@ -371,7 +371,6 @@ export default function BuilderIntelligenceClient() {
   const [tradeCode, setTradeCode] = useState('C39');
   const [sortBy, setSortBy] = useState<SortBy>('count');
   
-  const [keyword, setKeyword] = useState('');
   const [city, setCity] = useState('');
   const [county, setCounty] = useState('');
 
@@ -399,7 +398,6 @@ export default function BuilderIntelligenceClient() {
     setSubFilter('all');
     setLicenseClass(category === 'meps' ? 'C10' : '');
     setTradeCode('C39');
-    setKeyword('');
     setCity('');
     setCounty('');
     setBuilders([]);
@@ -416,7 +414,6 @@ export default function BuilderIntelligenceClient() {
     if (subFilter !== 'all') params.set('filter', subFilter);
     if (category === 'meps') params.set('license_class', licenseClass);
     if (category === 'trades') params.set('license_class', tradeCode);
-    if (keyword.trim()) params.set('keyword', keyword.trim());
     if (city.trim()) params.set('city', city.trim());
     if (county.trim()) params.set('county', county.trim());
 
@@ -437,7 +434,7 @@ export default function BuilderIntelligenceClient() {
       setIsLoading(false);
       setHasSearched(true);
     }
-  }, [category, propertyType, subFilter, licenseClass, tradeCode, sortBy, keyword, city, county]);
+  }, [category, propertyType, subFilter, licenseClass, tradeCode, sortBy, city, county]);
 
   const goToPage = useCallback((page: number) => {
     handleSearch(page);
@@ -615,21 +612,10 @@ export default function BuilderIntelligenceClient() {
                 </div>
               )}
 
-              {/* Keyword & Location Filters */}
+              {/* Location Filters */}
               <div className="pt-4 border-t border-slate-100 mt-2 mb-2">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Keyword & Location Search</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Keyword (e.g. metal gate)"
-                      value={keyword}
-                      onChange={e => setKeyword(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleSearch(1)}
-                      className="w-full pl-9 pr-4 py-2 text-sm font-semibold border border-slate-200 rounded-xl outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all placeholder:text-slate-400"
-                    />
-                  </div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Location Search</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <AutocompleteInput
                     type="city"
                     placeholder="City (e.g. Los Angeles)"
