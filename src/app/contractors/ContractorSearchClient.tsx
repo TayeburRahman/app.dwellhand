@@ -133,14 +133,15 @@ export default function ContractorSearchClient() {
 
   const isCommercial = role === 'paid' || role === 'commercial' || role === 'enterprise';
 
-  // ── Search handler ──
-  const performSearch = useCallback(async (license: string) => {
-    // Strip any class suffixes like "-B" or "-C39" (e.g. 1001034-B -> 1001034)
-    const cleanLicense = license.split('-')[0].trim();
-    if (!cleanLicense) return;
+  const performSearch = useCallback(async (query: string) => {
+    // Determine if it's a license (numbers) or a keyword search
+    const isLicense = /^\d+/.test(query);
+    const cleanQuery = isLicense ? query.split('-')[0].trim() : query.trim();
 
-    // Update input to reflect the cleaned license if it differs
-    setLicenseInput(cleanLicense);
+    if (!cleanQuery) return;
+
+    // Update input to reflect the cleaned query
+    setLicenseInput(cleanQuery);
 
     setIsLoading(true);
     setError(null);
@@ -151,22 +152,35 @@ export default function ContractorSearchClient() {
     setProfileMissing(false);
 
     try {
-      const [profileRes, permitsRes] = await Promise.all([
-        fetch(`/api/contractors/profile?license=${encodeURIComponent(cleanLicense)}`),
-        fetch(`/api/contractors/permits?license=${encodeURIComponent(cleanLicense)}`),
-      ]);
+      let profileJson: any = { profile: null };
+      let permitsJson: any = { permits: [] };
 
-      if (!profileRes.ok || !permitsRes.ok) {
-        const pErr = await profileRes.json().catch(() => ({}));
-        const mErr = await permitsRes.json().catch(() => ({}));
-        throw new Error(pErr.error || mErr.error || 'Server error fetching builder data.');
+      if (isLicense) {
+        const [profileRes, permitsRes] = await Promise.all([
+          fetch(`/api/contractors/profile?license=${encodeURIComponent(cleanQuery)}`),
+          fetch(`/api/contractors/permits?license=${encodeURIComponent(cleanQuery)}`),
+        ]);
+
+        if (!profileRes.ok || !permitsRes.ok) {
+          const pErr = await profileRes.json().catch(() => ({}));
+          const mErr = await permitsRes.json().catch(() => ({}));
+          throw new Error(pErr.error || mErr.error || 'Server error fetching builder data.');
+        }
+
+        profileJson = await profileRes.json();
+        permitsJson = await permitsRes.json();
+      } else {
+        // Global Keyword Search
+        const permitsRes = await fetch(`/api/contractors/permits?keyword=${encodeURIComponent(cleanQuery)}`);
+        if (!permitsRes.ok) {
+          const mErr = await permitsRes.json().catch(() => ({}));
+          throw new Error(mErr.error || 'Server error fetching permits.');
+        }
+        permitsJson = await permitsRes.json();
       }
 
-      const profileJson = await profileRes.json();
-      const permitsJson = await permitsRes.json();
-
       setProfile(profileJson.profile ?? null);
-      setProfileMissing(profileJson.profile === null);
+      setProfileMissing(isLicense && profileJson.profile === null);
       setPermits(permitsJson.permits ?? []);
     } catch (err: any) {
       setError(err.message ?? 'Unexpected error. Please try again.');
@@ -186,12 +200,16 @@ export default function ContractorSearchClient() {
     if (typeof window !== 'undefined' && !hasInitialSearched.current) {
       const params = new URLSearchParams(window.location.search);
       const initialLicense = params.get('license');
+      const initialKeyword = params.get('keyword');
       const initialAddress = params.get('address');
+
       if (initialAddress) setHighlightAddress(decodeURIComponent(initialAddress));
-      if (initialLicense) {
+
+      const queryToSearch = initialLicense || initialKeyword;
+      if (queryToSearch) {
         hasInitialSearched.current = true;
-        setLicenseInput(initialLicense);
-        performSearch(initialLicense);
+        setLicenseInput(queryToSearch);
+        performSearch(queryToSearch);
       }
     }
   }, [performSearch]);

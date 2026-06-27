@@ -618,6 +618,7 @@ export default function MapComponent() {
     // If we have initial data (from map click or list), show it immediately for instant feedback
     if (initialData) {
       setSelectedPermit(initialData);
+      setAddressPermits([initialData]); // Instantly show at least 1 history item
       setIsSidePanelOpen(true);
     }
 
@@ -634,7 +635,8 @@ export default function MapComponent() {
         is_owner_builder, is_commercial, is_residential, is_hillside, is_basement
       `)
       .eq('permit_number', permitId)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     setLoading(false);
     if (d) {
@@ -653,7 +655,23 @@ export default function MapComponent() {
         .eq(d.apn ? 'apn' : 'address', d.apn || d.address)
         .order('issue_date', { ascending: false });
 
-      setAddressPermits(allForAddress || [d]);
+      const historyMapped = (allForAddress || [d]).map(hpRaw => {
+        const hp = hpRaw as any;
+        let cat = 'Builder';
+        const lType = (hp.permit_type || hp.type || '').toLowerCase();
+        if (activeMode === 'Architect' && hp.architect) cat = 'Architect';
+        else if (activeMode === 'Engineer' && (hp.engineer || hp.geologist)) cat = 'Engineer';
+        else if (activeMode === 'Expeditor' && hp.permit_expediter) cat = 'Expeditor';
+        else if (activeMode === 'Trade' && (lType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/) || hp.project_category === 'Retaining Wall')) cat = 'Trade';
+        else {
+          if (lType.match(/(electrical|plumbing|mechanical|grading|pool|spa|demolition|roofing|septic)/) || hp.project_category === 'Retaining Wall') cat = 'Trade';
+          else if (hp.architect) cat = 'Architect';
+          else if (hp.engineer || hp.geologist) cat = 'Engineer';
+          else if (hp.permit_expediter) cat = 'Expeditor';
+        }
+        return { ...hp, category: hp.category || cat }; // preserve initialData category if present
+      });
+      setAddressPermits(historyMapped);
 
       let category = 'Builder';
       const lowerType = (d.permit_type || '').toLowerCase();
@@ -1127,16 +1145,24 @@ export default function MapComponent() {
                     <div className="space-y-3">
                       {addressPermits.map((p) => (
                         <div
-                          key={p.permit_number}
+                          key={p.permit_number || Math.random().toString()}
                           onClick={() => handleSelectPermit(p.permit_number, p)}
                           className={`p-3 rounded-xl border transition-all cursor-pointer ${selectedPermit?.permit_number === p.permit_number ? 'bg-indigo-50 border-indigo-200 shadow-sm' : 'bg-white border-slate-100 hover:border-indigo-100'}`}
                         >
-                          <div className="flex justify-between items-start gap-2">
-                            <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-tight">{p.permit_type}</span>
-                            <span className="text-[10px] font-bold text-slate-400">{p.issue_date}</span>
+                          <div className="flex flex-col gap-1">
+                            <p className="text-sm font-bold text-slate-900 truncate">{p.contractor || 'Owner-Builder'}</p>
+                            <p className="text-xs text-slate-500 truncate">{p.address || 'Unknown Address'}</p>
+                            
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded uppercase tracking-tight">{p.category || 'Builder'}</span>
+                              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-tight">{p.permit_type || p.type || 'Unknown'}</span>
+                            </div>
+                            
+                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100/50">
+                               <span className="text-[10px] font-bold text-slate-400">{p.issue_date || 'Unknown Date'}</span>
+                               {p.valuation && <span className="text-[10px] font-bold text-emerald-600">${Number(p.valuation).toLocaleString()}</span>}
+                            </div>
                           </div>
-                          <p className="text-xs font-semibold text-slate-800 mt-1 truncate">{p.contractor || 'Owner-Builder'}</p>
-                          {p.valuation && <p className="text-[10px] font-bold text-emerald-600 mt-1">${Number(p.valuation).toLocaleString()}</p>}
                         </div>
                       ))}
                     </div>
@@ -1408,7 +1434,7 @@ export default function MapComponent() {
                       className="px-4 py-3.5 hover:bg-slate-50 cursor-pointer transition-colors group"
                       onClick={() => {
                         if (p?.id) {
-                          handleSelectPermit(p.id);
+                          handleSelectPermit(p.id, p);
                         }
                         // Popup will be closed by the useEffect watching isSidePanelOpen
                         if (map.current) {

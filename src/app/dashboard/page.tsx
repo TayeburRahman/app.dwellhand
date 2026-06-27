@@ -20,12 +20,7 @@ const fetchDashboardData = async () => {
 
   const [countRes, recentRes, commRes, resRes] = await Promise.all([
     supabase.from(tableName).select('*', { count: 'estimated', head: true }),
-    supabase
-      .from(tableName)
-      .select('address, permit_number, issue_date, valuation, permit_type')
-      .not('issue_date', 'is', null)
-      .order('issue_date', { ascending: false })
-      .limit(8),
+    supabase.rpc('get_recent_permits'),
     supabase.from(tableName).select('*', { count: 'estimated', head: true }).eq('is_commercial', true),
     supabase.from(tableName).select('*', { count: 'estimated', head: true }).eq('is_residential', true)
   ]);
