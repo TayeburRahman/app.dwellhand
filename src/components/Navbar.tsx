@@ -65,16 +65,19 @@ export function Navbar() {
       // Clean multi-licenses or suffixes (e.g. "1009682-B | 1009682-C10" -> "1009682")
       const baseLicense = row.contractor_license.split('|')[0].split('-')[0].trim();
       params.set('license', baseLicense);
+    } else {
+      // If no license, search globally by permit number or address
+      params.set('keyword', row.permit_number || row.address);
     }
-    if (row.permit_number) params.set('permit', row.permit_number);
-    else params.set('address', row.address);
+    if (row.address) params.set('address', row.address); // for highlighting
     router.push(`/contractors?${params}`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && query.trim()) {
       setShowDrop(false);
-      router.push(`/contractors?address=${encodeURIComponent(query.trim())}`);
+      // Pass the raw query as a keyword search
+      router.push(`/contractors?keyword=${encodeURIComponent(query.trim())}`);
       setQuery('');
     }
   };
