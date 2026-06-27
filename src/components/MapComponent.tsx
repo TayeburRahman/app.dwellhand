@@ -266,7 +266,9 @@ export default function MapComponent() {
       .lte('longitude', maxLng)
       .limit(500);
 
+    // To prevent database timeouts on the new large table, we defer sorting to the client side.
     // Apply Supabase-level sorting (PROMPT 11 & Requirements Sync)
+    /*
     if (sortBy === 'valuation') {
       query = query.order('valuation', { ascending: false, nullsFirst: false });
     } else if (sortBy === 'name_az') {
@@ -274,13 +276,11 @@ export default function MapComponent() {
     } else if (sortBy === 'years_biz') {
       query = query.order('issue_date', { ascending: true }); // Proxy for oldest (longest in biz)
     }
-    //  else if (sortBy === 'permit_year') {
-    // query = query.order('issue_date', { ascending: false });
-    // } 
     else {
       // most_active or default: newest first
       query = query.order('issue_date', { ascending: false });
     }
+    */
 
     // Apply city filter at Supabase query level (PROMPT 12)
     const cityConfig = CITIES.find(c => c.key === selectedCity);
@@ -362,10 +362,21 @@ export default function MapComponent() {
       return;
     }
 
+    let sortedData = rawData || [];
+    if (sortBy === 'valuation') {
+      sortedData.sort((a, b) => (b.valuation || 0) - (a.valuation || 0));
+    } else if (sortBy === 'name_az') {
+      sortedData.sort((a, b) => (a.contractor || '').localeCompare(b.contractor || ''));
+    } else if (sortBy === 'years_biz') {
+      sortedData.sort((a, b) => new Date(a.issue_date || 0).getTime() - new Date(b.issue_date || 0).getTime());
+    } else {
+      sortedData.sort((a, b) => new Date(b.issue_date || 0).getTime() - new Date(a.issue_date || 0).getTime());
+    }
+
     // Transform raw Supabase data to Mapbox GeoJSON
     const geojson = {
       type: 'FeatureCollection',
-      features: (rawData || []).map((d: any) => {
+      features: sortedData.map((d: any) => {
         // 1. Professional Category Mapping (for Tags & Filters)
         let category = 'Builder';
         const lowerType = (d.permit_type || '').toLowerCase();
