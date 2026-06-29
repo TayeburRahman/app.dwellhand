@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const supabase = await createClient();
 
   const { data: profile, error } = await supabase
-    .from('builder_intelligence_test')
+    .from('builder_intelligence')
     .select('*')
     .eq('contractor_license', license)
     .maybeSingle();
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       license_class: profile.cslb_classification,
       issue_date: profile.cslb_issue_date,
       expiration_date: profile.cslb_expire_date,
-      price_indicator: null, 
+      price_indicator: null,
     };
   }
 

@@ -52,7 +52,26 @@ const getCachedKeywordPermits = unstable_cache(
       .rpc('search_permits_by_keyword', { p_keyword: keyword });
 
     if (error) throw new Error(error.message);
-    return permits || [];
+
+    const resultList = permits || [];
+    if (resultList.length > 0) {
+      const permitNumbers = resultList.map((p: any) => p.permit_number).filter(Boolean);
+      if (permitNumbers.length > 0) {
+        const { data: licenses, error: licenseError } = await supabaseAdmin
+          .from('ca_permits')
+          .select('permit_number, contractor_license')
+          .in('permit_number', permitNumbers);
+
+        if (!licenseError && licenses) {
+          const licenseMap = new Map(licenses.map(l => [l.permit_number, l.contractor_license]));
+          resultList.forEach((p: any) => {
+            p.contractor_license = licenseMap.get(p.permit_number) || null;
+          });
+        }
+      }
+    }
+
+    return resultList;
   },
   ['keyword-permits'],
   { revalidate: 3600 }

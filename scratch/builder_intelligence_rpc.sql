@@ -132,7 +132,7 @@ AS $$
     COUNT(p.permit_number)::BIGINT                                             AS project_count,
     SUM(COALESCE(p.valuation, 0))::BIGINT                                     AS total_valuation,
     (ARRAY_AGG(DISTINCT p.address) FILTER (WHERE p.address IS NOT NULL))[1:5] AS sample_addresses
-  FROM public.builder_intelligence_test bit
+  FROM public.builder_intelligence bit
   LEFT JOIN public.ca_permits p
     ON  p.contractor_license::TEXT = bit.contractor_license::TEXT
     AND (p_property_type != 'residential' OR p.is_residential = true)
@@ -174,7 +174,7 @@ STABLE
 SET search_path = public
 AS $$
   SELECT COUNT(DISTINCT bit.contractor_license)
-  FROM public.builder_intelligence_test bit
+  FROM public.builder_intelligence bit
   LEFT JOIN public.ca_permits p
     ON  p.contractor_license::TEXT = bit.contractor_license::TEXT
     AND (p_property_type != 'residential' OR p.is_residential = true)

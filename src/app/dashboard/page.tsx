@@ -1,14 +1,25 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import useSWR from 'swr';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, Map as MapIcon, ArrowUpRight, BarChart3, Clock, MapPin, Search } from 'lucide-react';
+import { FileText, Map as MapIcon, ArrowUpRight, BarChart3, Clock, MapPin, Search, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import PermitResultList from '@/components/PermitResultList';
+
+const ContractorMapView = dynamic(() => import('@/components/ContractorMapView'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[480px] rounded-2xl bg-slate-900/50 border border-slate-700 animate-pulse flex items-center justify-center">
+      <p className="text-slate-500 text-sm font-bold">Loading map…</p>
+    </div>
+  ),
+});
 
 const supabase = createClient();
 
@@ -34,19 +45,153 @@ const fetchDashboardData = async () => {
   };
 };
 
-export default function DashboardPage() {
+function DashboardContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const keywordQuery = searchParams.get('keyword') || '';
+  const licenseQuery = searchParams.get('license') || '';
+  const addressQuery = searchParams.get('address') || '';
+
+  const activeQuery = keywordQuery || licenseQuery || addressQuery;
+
+  // Sync state for map viewport changes
+  const [viewportPermits, setViewportPermits] = React.useState<any[] | null>(null);
+
+  // Reset viewport permits when search query changes
+  React.useEffect(() => {
+    setViewportPermits(null);
+  }, [activeQuery]);
+
   // SWR automatically handles caching, revalidation, and loading states!
   const { data, isLoading } = useSWR('dashboard_data', fetchDashboardData, {
     revalidateOnFocus: false,
     dedupingInterval: 300000,
   });
 
-  const router = useRouter();
+  const [currentTier, setCurrentTier] = React.useState('FREE');
+  React.useEffect(() => {
+    const fetchUserTier = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const role = user?.user_metadata?.role;
+      if (role === 'paid' || role === 'enterprise') {
+        setCurrentTier('ENTERPRISE');
+      } else if (role === 'commercial') {
+        setCurrentTier('COMMERCIAL');
+      } else if (role === 'residential') {
+        setCurrentTier('RESIDENTIAL');
+      } else {
+        setCurrentTier('FREE');
+      }
+    };
+    fetchUserTier();
+  }, []);
+
+  const { data: searchResults, error: searchError, isLoading: searchLoading } = useSWR(
+    activeQuery ? `search_permits_${activeQuery}` : null,
+    async () => {
+      let url = '';
+      if (licenseQuery) {
+        url = `/api/contractors/permits?license=${encodeURIComponent(licenseQuery)}`;
+      } else if (keywordQuery) {
+        url = `/api/contractors/permits?keyword=${encodeURIComponent(keywordQuery)}`;
+      } else if (addressQuery) {
+        url = `/api/contractors/permits?keyword=${encodeURIComponent(addressQuery)}`;
+      }
+      if (!url) return [];
+      const res = await fetch(url);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to fetch search results');
+      }
+      const data = await res.json();
+      return data.permits || [];
+    }
+  );
+
   const [keyword, setKeyword] = React.useState('');
+
+  // Sync search keyword input with keywordQuery parameter
+  React.useEffect(() => {
+    if (keywordQuery) {
+      setKeyword(keywordQuery);
+    }
+  }, [keywordQuery]);
 
   const user = data?.user;
   const totalPermits = data?.totalPermits || '0';
   const recentPermits = data?.recentPermits || [];
+
+  if (activeQuery) {
+    return (
+      <div className="space-y-8 animate-in pb-10 mesh-gradient min-h-full -m-8 p-8">
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => {
+              setKeyword('');
+              router.push('/dashboard');
+            }}
+            className="text-xs font-black text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            ← Back to Market Intelligence
+          </button>
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Permit Explorer Results
+          </div>
+        </div>
+
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight text-indigo-950">
+            {licenseQuery ? `Builder Permits` : `Keyword Search Results`}
+          </h1>
+          <p className="text-sm font-semibold text-slate-500 mt-2">
+            {licenseQuery
+              ? `Showing permits for contractor license #${licenseQuery}`
+              : `Showing permits matching keyword "${keywordQuery || addressQuery}"`}
+          </p>
+        </div>
+
+        {searchLoading ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+            <div className="lg:col-span-1 space-y-6">
+              <div className="w-full h-[480px] rounded-2xl bg-slate-100 animate-pulse border border-slate-200" />
+            </div>
+            <div className="lg:col-span-2 space-y-4">
+              <div className="h-6 w-48 bg-slate-100 rounded animate-pulse" />
+              <div className="h-28 w-full bg-slate-100 rounded-2xl animate-pulse" />
+              <div className="h-28 w-full bg-slate-100 rounded-2xl animate-pulse" />
+              <div className="h-28 w-full bg-slate-100 rounded-2xl animate-pulse" />
+            </div>
+          </div>
+        ) : searchError ? (
+          <div className="p-6 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-700">
+            <AlertCircle className="w-5 h-5" />
+            <p className="text-sm font-bold">Error: {searchError.message}</p>
+          </div>
+        ) : !searchResults || searchResults.length === 0 ? (
+          <div className="bg-white/80 backdrop-blur-sm border border-slate-200 rounded-2xl p-16 text-center shadow-lg shadow-indigo-100/30">
+            <p className="text-slate-500 text-lg font-bold">No matching permits found</p>
+            <p className="text-slate-400 text-sm mt-1">Try another search keyword or check spelling.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+            {/* Left Column: Map & Legend */}
+            <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-24">
+              <ContractorMapView permits={searchResults} onViewportChange={setViewportPermits} />
+            </div>
+
+            {/* Right Column: Listings */}
+            <div className="lg:col-span-2 relative">
+              <PermitResultList
+                permits={viewportPermits ?? searchResults}
+                highlightAddress={addressQuery}
+                currentTier={currentTier}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-in pb-10 mesh-gradient min-h-full -m-8 p-8">
@@ -166,7 +311,7 @@ export default function DashboardPage() {
               onChange={(e) => setKeyword(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && keyword.trim()) {
-                  router.push(`/contractors?keyword=${encodeURIComponent(keyword.trim())}`);
+                  router.push(`/dashboard?keyword=${encodeURIComponent(keyword.trim())}`);
                 }
               }}
               placeholder="Enter a keyword to search all permits..."
@@ -174,7 +319,7 @@ export default function DashboardPage() {
             />
             <Button
               onClick={() => {
-                if (keyword.trim()) router.push(`/contractors?keyword=${encodeURIComponent(keyword.trim())}`);
+                if (keyword.trim()) router.push(`/dashboard?keyword=${encodeURIComponent(keyword.trim())}`);
               }}
               className="absolute right-2 top-1/2 -translate-y-1/2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm transition-all"
               size="sm"
@@ -190,7 +335,7 @@ export default function DashboardPage() {
               key={tag}
               onClick={() => {
                 setKeyword(tag);
-                router.push(`/contractors?keyword=${encodeURIComponent(tag)}`);
+                router.push(`/dashboard?keyword=${encodeURIComponent(tag)}`);
               }}
               className="text-[11px] font-bold text-slate-600 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded-full transition-colors whitespace-nowrap"
             >
@@ -318,5 +463,17 @@ export default function DashboardPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50/50">
+        <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }

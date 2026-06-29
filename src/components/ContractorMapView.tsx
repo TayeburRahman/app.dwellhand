@@ -95,6 +95,8 @@ export default function ContractorMapView({ permits, onViewportChange }: Contrac
               is_hillside: p.is_hillside,
               permit_link: p.permit_link ?? '',
               color: getPinColor(p),
+              contractor: p.contractor ?? '',
+              contractor_license: p.contractor_license ?? '',
             },
           })),
         };
@@ -182,7 +184,13 @@ export default function ContractorMapView({ permits, onViewportChange }: Contrac
                 </div>
                 <div style="background:#f8fafc;border-radius:10px;padding:8px 10px;margin-bottom:8px">
                   <p style="font-size:11px;color:#475569;margin:0 0 3px"><span style="font-weight:800;color:#1e293b">Permit:</span> #${props.permit_number} &nbsp;·&nbsp; ${props.permit_type}</p>
-                  <p style="font-size:11px;color:#475569;margin:0"><span style="font-weight:800;color:#1e293b">Date:</span> ${props.issue_date} &nbsp;·&nbsp; <span style="font-weight:900;color:#059669">${formatVal(props.valuation)}</span></p>
+                  <p style="font-size:11px;color:#475569;margin:0 0 3px"><span style="font-weight:800;color:#1e293b">Date:</span> ${props.issue_date} &nbsp;·&nbsp; <span style="font-weight:900;color:#059669">${formatVal(props.valuation)}</span></p>
+                  ${props.contractor ? `
+                    <p style="font-size:11px;color:#475569;margin:0">
+                      <span style="font-weight:800;color:#1e293b">Builder:</span>
+                      ${props.contractor_license ? `<a href="/contractors?license=${encodeURIComponent(props.contractor_license)}" style="color:#4f46e5;font-weight:800;text-decoration:underline">${props.contractor}</a>` : `<span style="font-weight:700">${props.contractor}</span>`}
+                    </p>
+                  ` : ''}
                 </div>
                 ${props.work_description ? `<p style="font-size:10px;color:#94a3b8;line-height:1.5;margin:0 0 8px">${props.work_description.slice(0, 130)}${props.work_description.length > 130 ? '…' : ''}</p>` : ''}
                 ${link ? `<a href="${link}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;color:#059669;text-decoration:none;padding:4px 8px;background:#ecfdf5;border-radius:6px;border:1px solid #a7f3d0">View Details ↗</a>` : ''}

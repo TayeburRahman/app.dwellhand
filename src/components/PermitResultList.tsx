@@ -22,6 +22,7 @@ export interface Permit {
   project_type: string | null;
   project_category: string | null;
   contractor: string | null;
+  contractor_license?: string | null;
   square_feet?: number | null;
   status?: string | null;
 }
@@ -93,15 +94,21 @@ function filterPermit(permit: Permit, filter: string): boolean {
   return true;
 }
 
+import Link from 'next/link';
+
 interface PermitResultListProps {
   permits: Permit[];
   highlightAddress?: string | null;
+  currentTier?: string;
 }
 
-export default function PermitResultList({ permits, highlightAddress }: PermitResultListProps) {
+export default function PermitResultList({ permits, highlightAddress, currentTier = 'FREE' }: PermitResultListProps) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [visibleCount, setVisibleCount] = useState(30);
   const highlightRef = useRef<HTMLDivElement>(null);
+
+  const isResidential = ['RESIDENTIAL', 'COMMERCIAL', 'ENTERPRISE'].includes(currentTier);
+  const isCommercial = ['COMMERCIAL', 'ENTERPRISE'].includes(currentTier);
 
   // Auto-scroll to highlighted permit after render
   useEffect(() => {
@@ -198,14 +205,32 @@ export default function PermitResultList({ permits, highlightAddress }: PermitRe
                       <span className="text-xs font-bold text-slate-400">{permit.city}</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                       {permit.permit_type ?? 'N/A'}
                     </span>
                     {permit.permit_number && (
                       <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                        #{permit.permit_number}
+                        {isResidential ? `#${permit.permit_number}` : '#🔒'}
                       </span>
+                    )}
+                    {permit.contractor && (
+                      <div className="text-xs text-slate-600 font-semibold flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
+                        <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">Contractor:</span>
+                        {permit.contractor_license ? (
+                          <Link
+                            href={`/contractors?license=${encodeURIComponent(permit.contractor_license)}`}
+                            className="text-indigo-600 hover:text-indigo-800 font-bold hover:underline inline-flex items-center gap-0.5"
+                          >
+                            {permit.contractor}
+                            <span className="text-[10px] font-bold text-slate-400 font-mono">
+                              (#{permit.contractor_license})
+                            </span>
+                          </Link>
+                        ) : (
+                          <span className="text-slate-700 font-bold">{permit.contractor}</span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -223,15 +248,25 @@ export default function PermitResultList({ permits, highlightAddress }: PermitRe
                   </div>
 
                   {permit.permit_number && (
-                    <a
-                      href={getLADBSLink(permit.permit_number, permit.permit_link ?? undefined)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-xl transition-colors border border-emerald-200 w-max shrink-0"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Permit Link
-                    </a>
+                    isResidential ? (
+                      <a
+                        href={getLADBSLink(permit.permit_number, isCommercial ? (permit.permit_link ?? undefined) : undefined)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-xl transition-colors border border-emerald-200 w-max shrink-0"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Permit Link
+                      </a>
+                    ) : (
+                      <button
+                        onClick={() => alert('Upgrade your plan to unlock permit links')}
+                        className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 cursor-pointer hover:border-slate-300 transition-colors w-max shrink-0"
+                      >
+                        <span>🔒</span>
+                        Permit Link
+                      </button>
+                    )
                   )}
                 </div>
               </div>
@@ -252,7 +287,9 @@ export default function PermitResultList({ permits, highlightAddress }: PermitRe
 
                 <div className="flex flex-col gap-1">
                   <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Project Type</span>
-                  <span className="text-sm font-bold text-slate-700">{permit.project_type ?? 'N/A'}</span>
+                  <span className="text-sm font-bold text-slate-700">
+                    {isResidential ? (permit.project_type ?? 'N/A') : '🔒'}
+                  </span>
                 </div>
 
                 <div className="flex flex-col gap-1">

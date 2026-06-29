@@ -27,23 +27,23 @@ const getCachedPermitBased = unstable_cache(
     // Run data fetch and total count in parallel
     const [dataRes, countRes] = await Promise.all([
       supabaseAdmin.rpc('get_builder_intelligence', {
-        p_category:      category,
+        p_category: category,
         p_property_type: propertyType,
-        p_sub_filter:    subFilter,
-        p_sort_by:       sortBy,
-        p_result_limit:  PAGE_SIZE,
-        p_offset:        offset,
-        p_keyword:       keyword,
-        p_city:          city,
-        p_county:        county,
+        p_sub_filter: subFilter,
+        p_sort_by: sortBy,
+        p_result_limit: PAGE_SIZE,
+        p_offset: offset,
+        p_keyword: keyword,
+        p_city: city,
+        p_county: county,
       }),
       supabaseAdmin.rpc('get_builder_intelligence_count', {
-        p_category:      category,
+        p_category: category,
         p_property_type: propertyType,
-        p_sub_filter:    subFilter,
-        p_keyword:       keyword,
-        p_city:          city,
-        p_county:        county,
+        p_sub_filter: subFilter,
+        p_keyword: keyword,
+        p_city: city,
+        p_county: county,
       }),
     ]);
 
@@ -53,13 +53,13 @@ const getCachedPermitBased = unstable_cache(
     const rows = (dataRes.data ?? []) as RpcPermitRow[];
     const totalCount = Number(countRes.data ?? 0);
 
-    // Enrich with business names from builder_intelligence_test
+    // Enrich with business names from builder_intelligence
     const licenses = rows.map(r => r.contractor_license);
     const { data: profiles } = licenses.length
       ? await supabaseAdmin
-          .from('builder_intelligence_test')
-          .select('contractor_license, cslb_company_name, cslb_license_status')
-          .in('contractor_license', licenses)
+        .from('builder_intelligence')
+        .select('contractor_license, cslb_company_name, cslb_license_status')
+        .in('contractor_license', licenses)
       : { data: [] };
 
     const profileMap = new Map<string, { name: string; status: string }>();
@@ -73,20 +73,20 @@ const getCachedPermitBased = unstable_cache(
     const builders = rows.map((r, i) => {
       const prof = profileMap.get(r.contractor_license);
       return {
-        rank:               offset + i + 1,
+        rank: offset + i + 1,
         contractor_license: r.contractor_license,
-        business_name:      prof?.name ?? r.contractor_name ?? 'Unknown Builder',
-        license_status:     prof?.status ?? null,
-        project_count:      r.project_count,
-        total_valuation:    r.total_valuation,
-        addresses:          r.sample_addresses ?? [],
+        business_name: prof?.name ?? r.contractor_name ?? 'Unknown Builder',
+        license_status: prof?.status ?? null,
+        project_count: r.project_count,
+        total_valuation: r.total_valuation,
+        addresses: r.sample_addresses ?? [],
       };
     });
 
     return {
       builders,
-      total_count:  totalCount,
-      total_pages:  Math.ceil(totalCount / PAGE_SIZE),
+      total_count: totalCount,
+      total_pages: Math.ceil(totalCount / PAGE_SIZE),
       current_page: page,
     };
   },
@@ -106,19 +106,19 @@ const getCachedClassificationBased = unstable_cache(
       supabaseAdmin.rpc('get_builders_by_class', {
         p_license_class: licenseClass,
         p_property_type: propertyType,
-        p_sort_by:       sortBy,
-        p_result_limit:  PAGE_SIZE,
-        p_offset:        offset,
-        p_keyword:       keyword,
-        p_city:          city,
-        p_county:        county,
+        p_sort_by: sortBy,
+        p_result_limit: PAGE_SIZE,
+        p_offset: offset,
+        p_keyword: keyword,
+        p_city: city,
+        p_county: county,
       }),
       supabaseAdmin.rpc('get_builders_by_class_count', {
         p_license_class: licenseClass,
         p_property_type: propertyType,
-        p_keyword:       keyword,
-        p_city:          city,
-        p_county:        county,
+        p_keyword: keyword,
+        p_city: city,
+        p_county: county,
       }),
     ]);
 
@@ -137,9 +137,9 @@ const getCachedClassificationBased = unstable_cache(
     const baseLicenses = rows.map(r => r.contractor_license);
     const { data: profiles } = baseLicenses.length
       ? await supabaseAdmin
-          .from('builder_intelligence_test')
-          .select('contractor_license, cslb_company_name, cslb_license_status')
-          .in('contractor_license', baseLicenses)
+        .from('builder_intelligence')
+        .select('contractor_license, cslb_company_name, cslb_license_status')
+        .in('contractor_license', baseLicenses)
       : { data: [] };
 
     const profileMap = new Map<string, { name: string; status: string }>();
@@ -153,20 +153,20 @@ const getCachedClassificationBased = unstable_cache(
     const builders = rows.map((r, i) => {
       const prof = profileMap.get(r.contractor_license);
       return {
-        rank:               offset + i + 1,
+        rank: offset + i + 1,
         contractor_license: r.contractor_license,
-        business_name:      prof?.name || r.contractor_name || 'Unknown Builder',
-        license_status:     prof?.status ?? null,
-        project_count:      r.project_count,
-        total_valuation:    r.total_valuation,
-        addresses:          r.sample_addresses ?? [],
+        business_name: prof?.name || r.contractor_name || 'Unknown Builder',
+        license_status: prof?.status ?? null,
+        project_count: r.project_count,
+        total_valuation: r.total_valuation,
+        addresses: r.sample_addresses ?? [],
       };
     });
 
     return {
       builders,
-      total_count:  totalCount,
-      total_pages:  Math.ceil(totalCount / PAGE_SIZE),
+      total_count: totalCount,
+      total_pages: Math.ceil(totalCount / PAGE_SIZE),
       current_page: page,
     };
   },
@@ -176,15 +176,15 @@ const getCachedClassificationBased = unstable_cache(
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const category     = searchParams.get('category')      ?? 'new_build';
-  const propertyType = searchParams.get('type')          ?? 'all';
-  const subFilter    = searchParams.get('filter')        ?? '';
+  const category = searchParams.get('category') ?? 'new_build';
+  const propertyType = searchParams.get('type') ?? 'all';
+  const subFilter = searchParams.get('filter') ?? '';
   const licenseClass = searchParams.get('license_class') ?? '';
-  const sortBy       = (searchParams.get('sort') ?? 'count') as SortBy;
-  const page         = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
-  const keyword      = searchParams.get('keyword')       ?? '';
-  const city         = searchParams.get('city')          ?? '';
-  const county       = searchParams.get('county')        ?? '';
+  const sortBy = (searchParams.get('sort') ?? 'count') as SortBy;
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
+  const keyword = searchParams.get('keyword') ?? '';
+  const city = searchParams.get('city') ?? '';
+  const county = searchParams.get('county') ?? '';
 
   try {
     if (category === 'meps' || category === 'trades') {
