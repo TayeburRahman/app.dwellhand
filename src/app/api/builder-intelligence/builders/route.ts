@@ -102,6 +102,94 @@ const getCachedClassificationBased = unstable_cache(
 
     const offset = (page - 1) * PAGE_SIZE;
 
+    // Fast-path: When there are no permit-specific filters (keyword, city, county),
+    // we query builder_intelligence directly to avoid expensive table scans on ca_permits.
+    if (!keyword && !city && !county) {
+      const countField = propertyType === 'residential' ? 'residential_permits' : propertyType === 'commercial' ? 'commercial_permits' : 'total_permits';
+      
+      const [countRes, dataRes] = await Promise.all([
+        supabaseAdmin
+          .from('builder_intelligence')
+          .select('*', { count: 'exact', head: true })
+          .ilike('cslb_classification', `%${licenseClass}%`)
+          .gt(countField, 0),
+        supabaseAdmin
+          .from('builder_intelligence')
+          .select(`
+            contractor_license,
+            cslb_company_name,
+            cslb_license_status,
+            total_permits,
+            total_valuation,
+            residential_permits,
+            commercial_permits
+          `)
+          .ilike('cslb_classification', `%${licenseClass}%`)
+          .gt(countField, 0)
+          .order(
+            sortBy === 'valuation' ? 'total_valuation' : countField,
+            { ascending: false }
+          )
+          .range(offset, offset + PAGE_SIZE - 1)
+      ]);
+
+      if (countRes.error) throw new Error(countRes.error.message);
+      if (dataRes.error) throw new Error(dataRes.error.message);
+
+      const totalCount = countRes.count ?? 0;
+      const buildersList = dataRes.data ?? [];
+      const licenses = buildersList.map(b => b.contractor_license);
+
+      // Fetch sample addresses for these builders
+      const addressMap = new Map<string, string[]>();
+      if (licenses.length > 0) {
+        const { data: permits, error: permitsErr } = await supabaseAdmin
+          .from('ca_permits')
+          .select('contractor_license, address')
+          .or(licenses.map(lic => `contractor_license.like.${lic}%`).join(','))
+          .not('address', 'is', null)
+          .limit(1000);
+
+        if (!permitsErr && permits) {
+          for (const p of permits) {
+            const matchedLic = licenses.find(lic => p.contractor_license.startsWith(lic));
+            if (matchedLic) {
+              if (!addressMap.has(matchedLic)) {
+                addressMap.set(matchedLic, []);
+              }
+              const list = addressMap.get(matchedLic)!;
+              if (list.length < 5 && !list.includes(p.address)) {
+                list.push(p.address);
+              }
+            }
+          }
+        }
+      }
+
+      const builders = buildersList.map((r, i) => {
+        let projectCount = r.total_permits;
+        if (propertyType === 'residential') projectCount = r.residential_permits;
+        if (propertyType === 'commercial') projectCount = r.commercial_permits;
+
+        return {
+          rank: offset + i + 1,
+          contractor_license: r.contractor_license,
+          business_name: r.cslb_company_name || 'Unknown Builder',
+          license_status: r.cslb_license_status ?? null,
+          project_count: projectCount,
+          total_valuation: r.total_valuation,
+          addresses: addressMap.get(r.contractor_license) ?? [],
+        };
+      });
+
+      return {
+        builders,
+        total_count: totalCount,
+        total_pages: Math.ceil(totalCount / PAGE_SIZE),
+        current_page: page,
+      };
+    }
+
     const [dataRes, countRes] = await Promise.all([
       supabaseAdmin.rpc('get_builders_by_class', {
         p_license_class: licenseClass,

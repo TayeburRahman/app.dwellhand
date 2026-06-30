@@ -45,8 +45,10 @@ BEGIN
       cp.contractor,
       cp.address,
       COALESCE(cp.valuation, 0) AS valuation
-    FROM ca_permits cp
-    WHERE cp.contractor_license ILIKE '%' || p_license_class || '%'
+    FROM public.builder_intelligence bit
+    JOIN public.ca_permits cp
+      ON cp.contractor_license LIKE bit.contractor_license || '%'
+    WHERE bit.cslb_classification ILIKE '%' || p_license_class || '%'
       AND (p_property_type = 'all'
            OR (p_property_type = 'residential' AND cp.is_residential = TRUE)
            OR (p_property_type = 'commercial'  AND cp.is_commercial  = TRUE))
@@ -122,14 +124,16 @@ LANGUAGE sql
 STABLE
 AS $$
   SELECT COUNT(DISTINCT TRIM(SPLIT_PART(TRIM(part), '-', 1)))
-  FROM   ca_permits,
-  LATERAL UNNEST(STRING_TO_ARRAY(contractor_license, '|')) AS part
-  WHERE  contractor_license ILIKE '%' || p_license_class || '%'
+  FROM   public.builder_intelligence bit
+  JOIN   public.ca_permits cp
+    ON   cp.contractor_license LIKE bit.contractor_license || '%',
+  LATERAL UNNEST(STRING_TO_ARRAY(cp.contractor_license, '|')) AS part
+  WHERE  bit.cslb_classification ILIKE '%' || p_license_class || '%'
     AND  UPPER(TRIM(part)) LIKE '%-' || UPPER(p_license_class)
     AND  (p_property_type = 'all'
-          OR (p_property_type = 'residential' AND is_residential = TRUE)
-          OR (p_property_type = 'commercial'  AND is_commercial  = TRUE))
-    AND  (p_keyword = '' OR work_description ILIKE '%' || p_keyword || '%')
-    AND  (p_city    = '' OR city             ILIKE '%' || p_city    || '%')
-    AND  (p_county  = '' OR source_county    ILIKE '%' || p_county  || '%');
+          OR (p_property_type = 'residential' AND cp.is_residential = TRUE)
+          OR (p_property_type = 'commercial'  AND cp.is_commercial  = TRUE))
+    AND  (p_keyword = '' OR cp.work_description ILIKE '%' || p_keyword || '%')
+    AND  (p_city    = '' OR cp.city             ILIKE '%' || p_city    || '%')
+    AND  (p_county  = '' OR cp.source_county    ILIKE '%' || p_county  || '%');
 $$;
