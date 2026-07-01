@@ -32,7 +32,7 @@ const CATEGORIES: { key: Category; label: string; icon: string }[] = [
   { key: 'adu', label: 'ADU', icon: '🏡' },
   // MEPs = exactly C10 (Electrical), C20 (HVAC), C36 (Plumbing) per CSLB classification
   { key: 'meps', label: 'MEPs', icon: '⚡' },
-  { key: 'trades', label: 'Trades', icon: '🛠️' },
+  { key: 'trades', label: 'Owner-Builder', icon: '🛠️' },
 ];
 
 // MEPs are strictly C10, C20, and C36 per CSLB classification.
@@ -47,33 +47,24 @@ const MEP_CLASSES = [
 // Note: contractor_license in CA_PERMITS stores the full license+class suffix
 // e.g. "1001034-C39", "1001034-D49"
 const TRADE_OPTIONS = [
-  // ── C-class specialty ──
-  { code: 'C8',  label: 'Foundation – C8' },
-  { code: 'C11', label: 'Elevator – C11' },
-  { code: 'C12', label: 'Grading – C12' },
-  { code: 'C21', label: 'Demo – C21' },
-  { code: 'C27', label: 'Landscaping – C27' },
-  { code: 'C39', label: 'Roofing – C39' },
-  { code: 'C42', label: 'Sanitation – C42' },
-  { code: 'C46', label: 'Solar – C46' },
-  { code: 'C53', label: 'Pool – C53' },
-  // ── D-class specialty (CSLB) ──
-  { code: 'D06', label: 'Concrete Related – D06' },
-  { code: 'D09', label: 'Drilling & Blasting – D09' },
-  { code: 'D13', label: 'Fire Protection – D13' },
-  { code: 'D21', label: 'Machinery & Pumps – D21' },
-  { code: 'D28', label: 'Doors & Gates – D28' },
-  { code: 'D29', label: 'Paperhanging – D29' },
-  { code: 'D32', label: 'Parking & Highway – D32' },
-  { code: 'D34', label: 'Prefab Equipment – D34' },
-  { code: 'D35', label: 'Reinforcing Steel – D35' },
-  { code: 'D37', label: 'Refrigeration – D37' },
-  { code: 'D38', label: 'Sand & Water Blasting – D38' },
-  { code: 'D41', label: 'Siding & Decking – D41' },
-  { code: 'D43', label: 'Boiler & Steam – D43' },
-  { code: 'D44', label: 'Tile (Ceramic) – D44' },
-  { code: 'D49', label: 'Tree Service – D49' },
-  { code: 'D50', label: 'Reinforced Concrete – D50' },
+  { code: 'C12', label: 'C12 - Excavation / Earthwork / Asphalt' },
+  { code: 'C8',  label: 'C8 - Concrete / Pavers / Retaining Walls' },
+  { code: 'C5',  label: 'C5 - Framing' },
+  { code: 'C53', label: 'C53 - Pool' },
+  { code: 'C46', label: 'C46 - Solar' },
+  { code: 'C39', label: 'C39 - Roofing' },
+  { code: 'C42', label: 'C42 - Sanitation' },
+  { code: 'D41', label: 'D41 - Siding And Decking' },
+  { code: 'D51', label: 'D51 - Waterproofing' },
+  { code: 'C21', label: 'C21 - Demolition' },
+  { code: 'C29', label: 'C29 - Masonry / Outdoor Kitchen' },
+  { code: 'C27', label: 'C27 - Landscaping' },
+  { code: 'C13', label: 'C13 - Fence' },
+  { code: 'C6',  label: 'C6 - Cabinets / Finish Carpentry / Doors / Baseboards' },
+  { code: 'C15', label: 'C15 - Flooring' },
+  { code: 'C35', label: 'C35 - Stucco' },
+  { code: 'C43', label: 'C43 - Sheet Metal' },
+  { code: 'C17', label: 'C17 - Glazing' },
 ];
 
 const STATUS_DOT: Record<string, string> = {
@@ -188,7 +179,7 @@ function AutocompleteInput({
         }}
         className="w-full pl-9 pr-4 py-2 text-sm font-semibold border border-slate-200 rounded-xl outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all placeholder:text-slate-400"
       />
-      
+
       {showDropdown && (suggestions.length > 0 || isLoading) && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
           {isLoading ? (
@@ -235,9 +226,9 @@ function BuilderCard({ builder }: { builder: Builder }) {
   const [expanded, setExpanded] = useState(false);
   const rankColor =
     builder.rank === 1 ? 'bg-amber-400 text-white shadow-amber-200' :
-    builder.rank === 2 ? 'bg-slate-400 text-white shadow-slate-200' :
-    builder.rank === 3 ? 'bg-orange-400 text-white shadow-orange-200' :
-    'bg-indigo-50 text-indigo-600';
+      builder.rank === 2 ? 'bg-slate-400 text-white shadow-slate-200' :
+        builder.rank === 3 ? 'bg-orange-400 text-white shadow-orange-200' :
+          'bg-indigo-50 text-indigo-600';
 
   return (
     <div className="bg-white/80 backdrop-blur-sm border border-white/60 rounded-2xl shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
@@ -370,7 +361,7 @@ export default function BuilderIntelligenceClient() {
   const [licenseClass, setLicenseClass] = useState('');
   const [tradeCode, setTradeCode] = useState('C39');
   const [sortBy, setSortBy] = useState<SortBy>('count');
-  
+
   const [city, setCity] = useState('');
   const [county, setCounty] = useState('');
 
@@ -471,22 +462,20 @@ export default function BuilderIntelligenceClient() {
                 <button
                   key={t}
                   onClick={() => setPropertyType(t)}
-                  className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all ${
-                    propertyType === t
-                      ? 'bg-white text-indigo-700 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-600'
-                  }`}
+                  className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all ${propertyType === t
+                    ? 'bg-white text-indigo-700 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-600'
+                    }`}
                 >
                   {t === 'all' ? 'All' : t === 'residential' ? '🏠 Residential' : '🏢 Commercial'}
                 </button>
               ))}
             </div>
 
-            <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-lg ${
-              isEnterprise
-                ? 'bg-indigo-600 text-white shadow-indigo-200'
-                : 'bg-slate-100 text-slate-500 border border-slate-200'
-            }`}>
+            <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-lg ${isEnterprise
+              ? 'bg-indigo-600 text-white shadow-indigo-200'
+              : 'bg-slate-100 text-slate-500 border border-slate-200'
+              }`}>
               <Shield className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{isEnterprise ? 'Enterprise' : 'Upgrade Required'}</span>
             </div>
@@ -507,11 +496,10 @@ export default function BuilderIntelligenceClient() {
                 <button
                   key={cat.key}
                   onClick={() => setCategory(cat.key)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black transition-all ${
-                    category === cat.key
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
-                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
-                  }`}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black transition-all ${category === cat.key
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                    }`}
                 >
                   <span>{cat.icon}</span>
                   <span className="hidden sm:inline">{cat.label}</span>
@@ -534,11 +522,10 @@ export default function BuilderIntelligenceClient() {
                       <button
                         key={f.key}
                         onClick={() => setSubFilter(f.key)}
-                        className={`text-xs font-black px-4 py-2 rounded-xl border transition-all ${
-                          subFilter === f.key
-                            ? 'bg-indigo-600 text-white border-indigo-600'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
-                        }`}
+                        className={`text-xs font-black px-4 py-2 rounded-xl border transition-all ${subFilter === f.key
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                          }`}
                       >
                         {f.label}
                       </button>
@@ -564,11 +551,10 @@ export default function BuilderIntelligenceClient() {
                       <button
                         key={c.code}
                         onClick={() => setLicenseClass(c.code)}
-                        className={`text-xs font-black px-4 py-2 rounded-xl border transition-all ${
-                          licenseClass === c.code
-                            ? 'bg-indigo-600 text-white border-indigo-600'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
-                        }`}
+                        className={`text-xs font-black px-4 py-2 rounded-xl border transition-all ${licenseClass === c.code
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                          }`}
                       >
                         {c.label}
                       </button>
@@ -647,11 +633,10 @@ export default function BuilderIntelligenceClient() {
                       <button
                         key={s.key}
                         onClick={() => setSortBy(s.key)}
-                        className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all ${
-                          sortBy === s.key
-                            ? 'bg-white text-indigo-700 shadow-sm'
-                            : 'text-slate-400 hover:text-slate-600'
-                        }`}
+                        className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all ${sortBy === s.key
+                          ? 'bg-white text-indigo-700 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-600'
+                          }`}
                       >
                         {s.label}
                       </button>
@@ -750,11 +735,10 @@ export default function BuilderIntelligenceClient() {
                                   key={item}
                                   onClick={() => goToPage(item as number)}
                                   disabled={isLoading}
-                                  className={`w-9 h-9 rounded-xl text-sm font-black transition-all disabled:opacity-50 ${
-                                    item === currentPage
-                                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
-                                      : 'text-slate-500 hover:bg-slate-100'
-                                  }`}
+                                  className={`w-9 h-9 rounded-xl text-sm font-black transition-all disabled:opacity-50 ${item === currentPage
+                                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+                                    : 'text-slate-500 hover:bg-slate-100'
+                                    }`}
                                 >
                                   {item}
                                 </button>
@@ -793,11 +777,10 @@ export default function BuilderIntelligenceClient() {
                     <button
                       key={cat.key}
                       onClick={() => setCategory(cat.key)}
-                      className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border transition-all ${
-                        category === cat.key
-                          ? 'bg-indigo-600 text-white border-indigo-600'
-                          : 'bg-indigo-50 text-indigo-500 border-indigo-100 hover:border-indigo-300'
-                      }`}
+                      className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border transition-all ${category === cat.key
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-indigo-50 text-indigo-500 border-indigo-100 hover:border-indigo-300'
+                        }`}
                     >
                       {cat.icon} {cat.label}
                     </button>

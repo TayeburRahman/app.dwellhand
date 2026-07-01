@@ -3,19 +3,22 @@
 -- Dashboard → SQL Editor → New Query → Paste → Run
 -- ============================================================
 
--- 1. Trigram index so ILIKE '%C10%' is fast on the big ca_permits table
---    (Only needed once — skip if it already exists)
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE INDEX IF NOT EXISTS idx_ca_permits_contractor_license_trgm
-  ON ca_permits USING gin (contractor_license gin_trgm_ops);
+-- Prevent the script itself from timing out during index creation!
+SET statement_timeout = '10min';
+
+-- 1. Create a fast B-Tree index on the extracted base license!
+-- This allows INSTANT exact-match joins with builder_intelligence
+CREATE INDEX IF NOT EXISTS idx_ca_permits_base_license 
+  ON ca_permits (SPLIT_PART(contractor_license, '-', 1));
+
+CREATE INDEX IF NOT EXISTS idx_ca_permits_city_lower
+  ON ca_permits (LOWER(city));
+
+CREATE INDEX IF NOT EXISTS idx_ca_permits_county_lower
+  ON ca_permits (LOWER(source_county));
 
 -- ============================================================
--- 2. Main data function
---    contractor_license in ca_permits can be:
---      "1004379-C10"              (simple)
---      "1009682-B | 1009682-C10" (pipe-joined multi-license)
---    We split on '|', find the segment ending in '-<CLASS>',
---    extract the base number, then group and aggregate.
+-- 2. Main data function (Hash-Join Optimized)
 -- ============================================================
 CREATE OR REPLACE FUNCTION get_builders_by_class(
   p_license_class  TEXT,
@@ -37,80 +40,73 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 STABLE
 AS $$
+DECLARE
+  v_sql TEXT;
 BEGIN
-  RETURN QUERY
-  WITH raw_permits AS (
-    SELECT
-      cp.contractor_license AS raw_license,
-      cp.contractor,
-      cp.address,
-      COALESCE(cp.valuation, 0) AS valuation
-    FROM public.builder_intelligence bit
-    JOIN public.ca_permits cp
-      ON cp.contractor_license LIKE bit.contractor_license || '%'
-    WHERE bit.cslb_classification ILIKE '%' || p_license_class || '%'
-      AND (p_property_type = 'all'
-           OR (p_property_type = 'residential' AND cp.is_residential = TRUE)
-           OR (p_property_type = 'commercial'  AND cp.is_commercial  = TRUE))
-      AND (p_keyword = '' OR cp.work_description ILIKE '%' || p_keyword || '%')
-      AND (p_city    = '' OR cp.city             ILIKE '%' || p_city    || '%')
-      AND (p_county  = '' OR cp.source_county    ILIKE '%' || p_county  || '%')
-  ),
-  split_permits AS (
-    -- unnest pipe-joined license fields, keep only the segment ending with our class
-    SELECT
-      TRIM(SPLIT_PART(TRIM(part), '-', 1)) AS base_license,
-      rp.contractor,
-      rp.address,
-      rp.valuation
-    FROM raw_permits rp,
-    LATERAL UNNEST(STRING_TO_ARRAY(rp.raw_license, '|')) AS part
-    WHERE UPPER(TRIM(part)) LIKE '%-' || UPPER(p_license_class)
-  ),
-  grouped AS (
-    SELECT
-      sp.base_license,
-      MAX(sp.contractor)    AS contractor_name,
-      COUNT(*)::BIGINT      AS project_count,
-      SUM(sp.valuation)     AS total_valuation
-    FROM split_permits sp
-    WHERE sp.base_license IS NOT NULL AND sp.base_license <> ''
-    GROUP BY sp.base_license
-  ),
-  with_addresses AS (
-    SELECT
-      g.base_license,
-      g.contractor_name,
-      g.project_count,
-      g.total_valuation,
-      ARRAY(
-        SELECT DISTINCT sp2.address
-        FROM   split_permits sp2
-        WHERE  sp2.base_license = g.base_license
-          AND  sp2.address IS NOT NULL
-        LIMIT  5
-      ) AS sample_addresses
-    FROM grouped g
-  )
+  v_sql := '
   SELECT
-    wa.base_license      AS contractor_license,
-    wa.contractor_name,
-    wa.project_count,
-    wa.total_valuation,
-    wa.sample_addresses
-  FROM with_addresses wa
+    bit.contractor_license::TEXT,
+    MAX(cp.contractor) AS contractor_name,
+    COUNT(*)::BIGINT AS project_count,
+    SUM(COALESCE(cp.valuation, 0))::NUMERIC AS total_valuation,
+    (ARRAY_AGG(DISTINCT cp.address) FILTER (WHERE cp.address IS NOT NULL))[1:5] AS sample_addresses
+  FROM public.builder_intelligence bit
+  JOIN public.ca_permits cp
+    ON SPLIT_PART(cp.contractor_license, ''-'', 1) = bit.contractor_license
+  WHERE 1=1
+  ';
+
+  IF p_license_class <> '' THEN
+    v_sql := v_sql || ' AND bit.cslb_classification ILIKE ''%'' || $1 || ''%''';
+  END IF;
+
+  IF p_property_type = 'residential' THEN
+    v_sql := v_sql || ' AND cp.is_residential = TRUE';
+  ELSIF p_property_type = 'commercial' THEN
+    v_sql := v_sql || ' AND cp.is_commercial = TRUE';
+  END IF;
+
+  IF p_keyword <> '' THEN
+    v_sql := v_sql || ' AND cp.work_description ILIKE ''%'' || $6 || ''%''';
+  END IF;
+
+  IF p_city <> '' THEN
+    IF p_license_class <> '' THEN
+      -- Optimization: When license class is provided, we WANT Postgres to use the 
+      -- idx_ca_permits_base_license index for the join, NOT the city index.
+      -- By appending an empty string, we hide the column from the city index planner.
+      v_sql := v_sql || ' AND LOWER(cp.city || '''') = LOWER($7)';
+    ELSE
+      v_sql := v_sql || ' AND LOWER(cp.city) = LOWER($7)';
+    END IF;
+  END IF;
+
+  IF p_county <> '' THEN
+    IF p_license_class <> '' THEN
+      v_sql := v_sql || ' AND LOWER(cp.source_county || '''') = LOWER($8)';
+    ELSE
+      v_sql := v_sql || ' AND LOWER(cp.source_county) = LOWER($8)';
+    END IF;
+  END IF;
+
+  v_sql := v_sql || '
+  GROUP BY bit.contractor_license
   ORDER BY
-    CASE WHEN p_sort_by = 'valuation'
-         THEN wa.total_valuation
-         ELSE wa.project_count::NUMERIC
+    CASE WHEN $3 = ''valuation''
+         THEN SUM(COALESCE(cp.valuation, 0))
+         ELSE COUNT(*)
     END DESC
-  LIMIT  p_result_limit
-  OFFSET p_offset;
+  LIMIT $4
+  OFFSET $5;
+  ';
+
+  RETURN QUERY EXECUTE v_sql 
+  USING p_license_class, p_property_type, p_sort_by, p_result_limit, p_offset, p_keyword, p_city, p_county;
 END;
 $$;
 
 -- ============================================================
--- 3. Count function (total distinct builders, for pagination)
+-- 3. Count function (Hash-Join Optimized)
 -- ============================================================
 CREATE OR REPLACE FUNCTION get_builders_by_class_count(
   p_license_class  TEXT,
@@ -120,20 +116,60 @@ CREATE OR REPLACE FUNCTION get_builders_by_class_count(
   p_county         TEXT DEFAULT ''
 )
 RETURNS BIGINT
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $$
-  SELECT COUNT(DISTINCT TRIM(SPLIT_PART(TRIM(part), '-', 1)))
-  FROM   public.builder_intelligence bit
-  JOIN   public.ca_permits cp
-    ON   cp.contractor_license LIKE bit.contractor_license || '%',
-  LATERAL UNNEST(STRING_TO_ARRAY(cp.contractor_license, '|')) AS part
-  WHERE  bit.cslb_classification ILIKE '%' || p_license_class || '%'
-    AND  UPPER(TRIM(part)) LIKE '%-' || UPPER(p_license_class)
-    AND  (p_property_type = 'all'
-          OR (p_property_type = 'residential' AND cp.is_residential = TRUE)
-          OR (p_property_type = 'commercial'  AND cp.is_commercial  = TRUE))
-    AND  (p_keyword = '' OR cp.work_description ILIKE '%' || p_keyword || '%')
-    AND  (p_city    = '' OR cp.city             ILIKE '%' || p_city    || '%')
-    AND  (p_county  = '' OR cp.source_county    ILIKE '%' || p_county  || '%');
+DECLARE
+  v_sql TEXT;
+  v_count BIGINT;
+BEGIN
+  v_sql := '
+  SELECT COUNT(DISTINCT bit.contractor_license)
+  FROM public.builder_intelligence bit
+  JOIN public.ca_permits cp
+    ON SPLIT_PART(cp.contractor_license, ''-'', 1) = bit.contractor_license
+  WHERE 1=1
+  ';
+
+  IF p_license_class <> '' THEN
+    v_sql := v_sql || ' AND bit.cslb_classification ILIKE ''%'' || $1 || ''%''';
+  END IF;
+
+  IF p_property_type = 'residential' THEN
+    v_sql := v_sql || ' AND cp.is_residential = TRUE';
+  ELSIF p_property_type = 'commercial' THEN
+    v_sql := v_sql || ' AND cp.is_commercial = TRUE';
+  END IF;
+
+  IF p_keyword <> '' THEN
+    v_sql := v_sql || ' AND cp.work_description ILIKE ''%'' || $3 || ''%''';
+  END IF;
+
+  IF p_city <> '' THEN
+    IF p_license_class <> '' THEN
+      v_sql := v_sql || ' AND LOWER(cp.city || '''') = LOWER($4)';
+    ELSE
+      v_sql := v_sql || ' AND LOWER(cp.city) = LOWER($4)';
+    END IF;
+  END IF;
+
+  IF p_county <> '' THEN
+    IF p_license_class <> '' THEN
+      v_sql := v_sql || ' AND LOWER(cp.source_county || '''') = LOWER($5)';
+    ELSE
+      v_sql := v_sql || ' AND LOWER(cp.source_county) = LOWER($5)';
+    END IF;
+  END IF;
+
+  EXECUTE v_sql INTO v_count
+  USING p_license_class, p_property_type, p_keyword, p_city, p_county;
+
+  RETURN v_count;
+END;
 $$;
+
+-- ============================================================
+-- 4. CRITICAL: Increase timeout just for these complex searches!
+-- ============================================================
+ALTER FUNCTION get_builders_by_class(TEXT, TEXT, TEXT, INTEGER, INTEGER, TEXT, TEXT, TEXT) SET statement_timeout = '30s';
+ALTER FUNCTION get_builders_by_class_count(TEXT, TEXT, TEXT, TEXT, TEXT) SET statement_timeout = '30s';
