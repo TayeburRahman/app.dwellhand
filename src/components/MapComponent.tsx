@@ -101,7 +101,7 @@ export default function MapComponent() {
   const [enterpriseLoading, setEnterpriseLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [isListViewOpen, setIsListViewOpen] = useState(true);
+  const [isListViewOpen, setIsListViewOpen] = useState(false);
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [selectedPermit, setSelectedPermit] = useState<any>(null);
   const [addressPermits, setAddressPermits] = useState<any[]>([]);
@@ -300,10 +300,8 @@ export default function MapComponent() {
     if (filters.basement) query = query.eq('is_basement', true);
     if (filters.hillside) query = query.eq('is_hillside', true);
 
-    // THE FIX: If any filter is active (Categories or Features) 
-    // AND Owner-Builder is NOT explicitly requested, strictly exclude them.
-    const isAnyFilterActive = filters.commercial || filters.residential || filters.is_owner_builder || filters.basement || filters.hillside;
-    if (isAnyFilterActive && !filters.is_owner_builder) {
+    // Always exclude Owner-Builder permits unless the user explicitly enables the Owner-Builder filter.
+    if (!filters.is_owner_builder) {
       query = query.neq('is_owner_builder', true);
     }
 
@@ -915,8 +913,8 @@ export default function MapComponent() {
     if (filters.basement) query = query.eq('is_basement', true);
     if (filters.hillside) query = query.eq('is_hillside', true);
 
-    const isAnyFActive = filters.commercial || filters.residential || filters.is_owner_builder || filters.basement || filters.hillside;
-    if (isAnyFActive && !filters.is_owner_builder) {
+    // Always exclude Owner-Builder permits unless the user explicitly enables the Owner-Builder filter.
+    if (!filters.is_owner_builder) {
       query = query.neq('is_owner_builder', true);
     }
 
