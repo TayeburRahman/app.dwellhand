@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { unstable_cache } from 'next/cache';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 const PAGE_SIZE = 100;
@@ -327,6 +328,22 @@ async function fetchClassificationBased(
   };
 }
 
+const getCachedClassificationBased = unstable_cache(
+  async (licenseClass: string, propertyType: string, sortBy: SortBy, page: number, keyword: string, city: string, county: string) => {
+    return fetchClassificationBased(licenseClass, propertyType, sortBy, page, keyword, city, county);
+  },
+  ['builder-intelligence-classification'],
+  { revalidate: 3600 }
+);
+
+const getCachedPermitBased = unstable_cache(
+  async (category: string, propertyType: string, subFilter: string, sortBy: SortBy, page: number, keyword: string, city: string, county: string) => {
+    return fetchPermitBased(category, propertyType, subFilter, sortBy, page, keyword, city, county);
+  },
+  ['builder-intelligence-permit'],
+  { revalidate: 3600 }
+);
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category') ?? 'new_build';
@@ -342,9 +359,9 @@ export async function GET(request: NextRequest) {
   try {
     let data;
     if (category === 'meps' || category === 'trades') {
-      data = await fetchClassificationBased(licenseClass, propertyType, sortBy, page, keyword, city, county);
+      data = await getCachedClassificationBased(licenseClass, propertyType, sortBy, page, keyword, city, county);
     } else {
-      data = await fetchPermitBased(category, propertyType, subFilter, sortBy, page, keyword, city, county);
+      data = await getCachedPermitBased(category, propertyType, subFilter, sortBy, page, keyword, city, county);
     }
     return NextResponse.json(data);
   } catch (err: any) {
