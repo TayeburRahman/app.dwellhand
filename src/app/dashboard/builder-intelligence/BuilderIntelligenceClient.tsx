@@ -48,8 +48,8 @@ const MEP_CLASSES = [
 // e.g. "1001034-C39", "1001034-D49"
 const TRADE_OPTIONS = [
   { code: 'C12', label: 'C12 - Excavation / Earthwork / Asphalt' },
-  { code: 'C8',  label: 'C8 - Concrete / Pavers / Retaining Walls' },
-  { code: 'C5',  label: 'C5 - Framing' },
+  { code: 'C8', label: 'C8 - Concrete / Pavers / Retaining Walls' },
+  { code: 'C5', label: 'C5 - Framing' },
   { code: 'C53', label: 'C53 - Pool' },
   { code: 'C46', label: 'C46 - Solar' },
   { code: 'C39', label: 'C39 - Roofing' },
@@ -60,7 +60,7 @@ const TRADE_OPTIONS = [
   { code: 'C29', label: 'C29 - Masonry / Outdoor Kitchen' },
   { code: 'C27', label: 'C27 - Landscaping' },
   { code: 'C13', label: 'C13 - Fence' },
-  { code: 'C6',  label: 'C6 - Cabinets / Finish Carpentry / Doors / Baseboards' },
+  { code: 'C6', label: 'C6 - Cabinets / Finish Carpentry / Doors / Baseboards' },
   { code: 'C15', label: 'C15 - Flooring' },
   { code: 'C35', label: 'C35 - Stucco' },
   { code: 'C43', label: 'C43 - Sheet Metal' },
@@ -288,32 +288,42 @@ function BuilderCard({ builder }: { builder: Builder }) {
           </div>
 
           {/* Addresses */}
-          {builder.addresses.length > 0 && (
+          {(builder.addresses ?? []).length > 0 && (
             <div className="mt-3">
               <button
                 onClick={() => setExpanded(v => !v)}
                 className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 hover:text-indigo-600 transition-colors uppercase tracking-widest"
               >
                 <MapPin className="w-3 h-3" />
-                {expanded ? 'Hide' : 'Show'} recent addresses ({builder.addresses.length})
+                {expanded ? 'Hide' : 'Show'} recent permits ({builder.addresses.length})
                 <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
               </button>
               {expanded && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {builder.addresses.map((addr, i) => (
-                    <a
-                      key={i}
-                      href={`/contractors?license=${encodeURIComponent(builder.contractor_license)}&address=${encodeURIComponent(addr)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={`View full permit details for ${addr}`}
-                      className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg hover:bg-indigo-100 hover:border-indigo-400 hover:shadow-sm transition-all cursor-pointer group/addr"
-                    >
-                      <MapPin className="w-2.5 h-2.5 text-indigo-400 group-hover/addr:text-indigo-600 flex-shrink-0" />
-                      {addr}
-                      <ArrowUpRight className="w-2.5 h-2.5 text-indigo-300 group-hover/addr:text-indigo-600 flex-shrink-0" />
-                    </a>
-                  ))}
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {builder.addresses.map((entry, i) => {
+                    const sepIdx = entry.indexOf('||');
+                    const addr = sepIdx >= 0 ? entry.substring(0, sepIdx) : entry;
+                    const desc = sepIdx >= 0 ? entry.substring(sepIdx + 2) : null;
+                    return (
+                      <a
+                        key={i}
+                        href={`/contractors?license=${encodeURIComponent(builder.contractor_license)}&address=${encodeURIComponent(addr)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`View permit details for ${addr}`}
+                        className="inline-flex items-start gap-1.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-lg hover:bg-indigo-100 hover:border-indigo-400 hover:shadow-sm transition-all cursor-pointer group/addr w-full"
+                      >
+                        <MapPin className="w-2.5 h-2.5 text-indigo-400 group-hover/addr:text-indigo-600 flex-shrink-0 mt-0.5" />
+                        <span className="flex-1 min-w-0">
+                          <span className="font-black">{addr}</span>
+                          {desc && (
+                            <span className="text-indigo-400 font-normal"> — {desc}</span>
+                          )}
+                        </span>
+                        <ArrowUpRight className="w-2.5 h-2.5 text-indigo-300 group-hover/addr:text-indigo-600 flex-shrink-0 mt-0.5" />
+                      </a>
+                    );
+                  })}
                 </div>
               )}
             </div>

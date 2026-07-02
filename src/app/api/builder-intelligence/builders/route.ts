@@ -19,6 +19,82 @@ const supabaseAdmin = createSupabaseClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// ── Shared helper: fetch trade-specific addresses + descriptions ────────────
+// Batches OR queries into chunks of 25 to stay within PostgREST URL limits.
+// Phase 1: try trade-specific license suffix (e.g. '1234567-C39').
+// Phase 2: fall back to any permit ('1234567%') for contractors with no results.
+//
+// IMPORTANT: builder_intelligence.contractor_license may be stored as a base
+// number ('1234567') OR with a class suffix ('1234567-C39').
+// We always extract the base number before building queries so that:
+//   Phase 1 generates '1234567-C39%'  (not '1234567-C39-C39%')
+//   Phase 2 generates '1234567%'       (not '1234567-C39%')
+async function fetchAddressesForLicenses(
+  baseLicenses: string[],
+  licenseClass: string
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (!baseLicenses.length) return map;
+
+  // Strip any '-CLASS' suffix to get the pure numeric base license
+  const base = (lic: string) => lic.includes('-') ? lic.split('-')[0] : lic;
+
+  const BATCH = 25;
+
+  function addToMap(
+    permits: Array<{ contractor_license: string; address: string; work_description: string | null }>,
+    matchList: string[],
+    specificClass: boolean
+  ) {
+    for (const p of permits) {
+      let matchedLic: string | undefined;
+      if (specificClass) {
+        matchedLic = matchList.find(lic =>
+          p.contractor_license === `${base(lic)}-${licenseClass}` ||
+          p.contractor_license.startsWith(`${base(lic)}-${licenseClass}`)
+        );
+      } else {
+        matchedLic = matchList.find(lic => p.contractor_license.startsWith(base(lic)));
+      }
+      if (!matchedLic) continue;
+      if (!map.has(matchedLic)) map.set(matchedLic, []);
+      const list = map.get(matchedLic)!;
+      const dupe = list.some(s => s.startsWith(p.address + '||') || s === p.address);
+      if (list.length < 5 && !dupe) {
+        const desc = p.work_description ? p.work_description.trim().substring(0, 80) : null;
+        list.push(desc ? `${p.address}||${desc}` : p.address);
+      }
+    }
+  }
+
+  // Phase 1 — trade-specific (batched)
+  for (let i = 0; i < baseLicenses.length; i += BATCH) {
+    const batch = baseLicenses.slice(i, i + BATCH);
+    const { data } = await supabaseAdmin
+      .from('ca_permits')
+      .select('contractor_license, address, work_description')
+      .or(batch.map(lic => `contractor_license.like.${base(lic)}-${licenseClass}%`).join(','))
+      .not('address', 'is', null)
+      .limit(200);
+    if (data) addToMap(data, batch, true);
+  }
+
+  // Phase 2 — fallback for contractors with no trade-specific permits (batched)
+  const noResults = baseLicenses.filter(lic => !map.has(lic));
+  for (let i = 0; i < noResults.length; i += BATCH) {
+    const batch = noResults.slice(i, i + BATCH);
+    const { data } = await supabaseAdmin
+      .from('ca_permits')
+      .select('contractor_license, address, work_description')
+      .or(batch.map(lic => `contractor_license.like.${base(lic)}%`).join(','))
+      .not('address', 'is', null)
+      .limit(200);
+    if (data) addToMap(data, batch, false);
+  }
+
+  return map;
+}
+
 async function fetchPermitBased(
   category: string,
   propertyType: string,
@@ -117,8 +193,8 @@ async function fetchClassificationBased(
   if (!keyword && !city && !county) {
     const countField =
       propertyType === 'residential' ? 'residential_permits' :
-      propertyType === 'commercial' ? 'commercial_permits' :
-      'total_permits';
+        propertyType === 'commercial' ? 'commercial_permits' :
+          'total_permits';
 
     const [countRes, dataRes] = await Promise.all([
       supabaseAdmin
@@ -153,31 +229,7 @@ async function fetchClassificationBased(
     const buildersList = dataRes.data ?? [];
     const licenses = buildersList.map(b => b.contractor_license);
 
-    // Fetch sample addresses for these builders
-    const addressMap = new Map<string, string[]>();
-    if (licenses.length > 0) {
-      const { data: permits, error: permitsErr } = await supabaseAdmin
-        .from('ca_permits')
-        .select('contractor_license, address')
-        .or(licenses.map(lic => `contractor_license.like.${lic}%`).join(','))
-        .not('address', 'is', null)
-        .limit(1000);
-
-      if (!permitsErr && permits) {
-        for (const p of permits) {
-          const matchedLic = licenses.find(lic => p.contractor_license.startsWith(lic));
-          if (matchedLic) {
-            if (!addressMap.has(matchedLic)) {
-              addressMap.set(matchedLic, []);
-            }
-            const list = addressMap.get(matchedLic)!;
-            if (list.length < 5 && !list.includes(p.address)) {
-              list.push(p.address);
-            }
-          }
-        }
-      }
-    }
+    const addressMap = await fetchAddressesForLicenses(licenses, licenseClass);
 
     const builders = buildersList.map((r, i) => {
       let projectCount = r.total_permits;
@@ -252,6 +304,8 @@ async function fetchClassificationBased(
     });
   }
 
+  const slowAddressMap = await fetchAddressesForLicenses(baseLicenses, licenseClass);
+
   const builders = rows.map((r, i) => {
     const prof = profileMap.get(r.contractor_license);
     return {
@@ -261,7 +315,7 @@ async function fetchClassificationBased(
       license_status: prof?.status ?? null,
       project_count: r.project_count,
       total_valuation: r.total_valuation,
-      addresses: r.sample_addresses ?? [],
+      addresses: slowAddressMap.get(r.contractor_license) ?? [],
     };
   });
 
