@@ -1,7 +1,7 @@
 # Feature Requirements & Implementation Plan: Contractor License Search
 
 ## 1. Executive Summary & Purpose
-This document outlines the complete A-to-Z architecture, data integration, and UI/UX design plan for the **Contractor License Search (Builder Intelligence)** feature. 
+This document outlines the complete A-to-Z architecture, data integration, and UI/UX design plan for the Contractor License Search (Builder Intelligence) feature. 
 
 The primary purpose is to allow advanced users (Commercial Subscriptions) to search for builders/contractors using their CSLB license number and view comprehensive "Builder Intelligence" data, including business details, permit history, work locations, and project types.
 
