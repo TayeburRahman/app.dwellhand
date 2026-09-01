@@ -4,7 +4,7 @@ DwellHand is a premium, enterprise-grade Permit Intelligence platform designed f
 
 ![Dashboard Preview](https://github.com/TayeburRahman/app.dwellhand/raw/main/public/preview-dashboard.png)
 
-## Key Features
+### Key Features
 
 ### 1. Geospatial Intelligence Map
 *   **Real-time Visualization**: Interactive Mapbox GL JS integration showing permit density.
